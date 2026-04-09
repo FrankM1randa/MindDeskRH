@@ -67,3 +67,74 @@ exports.registerUsuario = async (req, res) => {
         });
     }
 };
+
+exports.getUsuarioByEmail = async (req, res) => {
+    const { email } = req.query;
+
+    if (!email) return res.status(400).json({ erro: 'Email é obrigatório' });
+
+    const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('email', email)
+        .single();
+
+    if (error) return res.status(500).json(error);
+
+    if (!data) return res.status(404).json({ erro: 'Usuário não encontrado' });
+
+    res.json(data);
+};
+
+exports.updateUsuario = async (req, res) => {
+    const { email } = req.query;
+    const { nome, novoEmail } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ erro: 'Informe o email do usuário na query' });
+    }
+
+    if (!nome && !novoEmail) {
+        return res.status(400).json({ erro: 'Informe ao menos um campo para atualizar' });
+    }
+
+    const campos = {};
+    if (nome) campos.nome = nome;
+    if (novoEmail) campos.email = novoEmail;
+
+    const { data, error } = await supabase
+        .from('usuarios')
+        .update(campos)
+        .eq('email', email)
+        .select();
+
+    if (error) return res.status(500).json(error);
+
+    if (!data || data.length === 0) {
+        return res.status(404).json({ erro: 'Usuário não encontrado' });
+    }
+
+    res.json(data);
+};
+
+exports.deleteUsuario = async (req, res) => {
+    const { email } = req.query;
+
+    if (!email) {
+        return res.status(400).json({ erro: 'Informe o email do usuário na query' });
+    }
+
+    const { data, error } = await supabase
+        .from('usuarios')
+        .delete()
+        .eq('email', email)
+        .select();
+
+    if (error) return res.status(500).json(error);
+
+    if (!data || data.length === 0) {
+        return res.status(404).json({ erro: 'Usuário não encontrado' });
+    }
+
+    res.json({ mensagem: 'Usuário deletado com sucesso', usuario: data });
+};
