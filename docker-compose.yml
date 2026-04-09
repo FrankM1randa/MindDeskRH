@@ -1,0 +1,12 @@
+
+services:
+  api:
+    build: .
+    container_name: minha-api
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    restart: always
+
+# use (docker-compose up --build) para iniciar o serviço no container, e (docker-compose down) para parar o serviço.
