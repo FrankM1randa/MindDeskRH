@@ -37,7 +37,7 @@ router.post('/register/admin', authMiddleware, adminMiddleware, async (req, res)
 
     if (error) return res.status(400).json({error: error.message })
 
-    await supabase.from('usuarios'.update({ nome, role:'admin'}).eq('id', data.user.id))
+    await supabase.from('usuarios').update({ nome, role:'admin'}).eq('id', data.user.id)
 
     return res.status(201).json({message: 'Admin criado com sucesso!'})
 })
@@ -63,7 +63,7 @@ router.post('/login', async (req, res) => {
         process.env.JWT_SECRET,
         {expiresIn: '8h'}
     )
-    return res.status(200).json({message: 'Login realizado!', session: data.session})
+    return res.status(200).json({message: 'Login realizado!', token})
 } )
 
 module.exports = router
