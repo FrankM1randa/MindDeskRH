@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 
+const { authMiddleware, adminMiddleware } = require('../middlewares/auth.middleware');
+
 const {
   getUsuarios,
   registerUsuario,
@@ -9,9 +11,9 @@ const {
   deleteUsuario
 } = require('../controllers/usuarios_controller');
 
-router.get('/', getUsuarios);
-router.get('/busca', getUsuarioByEmail);
-router.post('/register', registerUsuario);
-router.put('/', updateUsuario);
-router.delete('/', deleteUsuario);
+router.get('/', authMiddleware, adminMiddleware, getUsuarios);
+router.get('/busca', authMiddleware, adminMiddleware, getUsuarioByEmail);
+router.post('/register', authMiddleware, adminMiddleware, registerUsuario);
+router.put('/', authMiddleware, adminMiddleware, updateUsuario);
+router.delete('/', authMiddleware, adminMiddleware, deleteUsuario);
 module.exports = router;

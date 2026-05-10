@@ -1,6 +1,12 @@
 const supabase = require('../config/supabase');
 
-// GET
+/*
+    GET
+    Função responsavel pelo retorno dos dados que contem na tabela usuários
+    retorna TUDO
+
+    Essa função não precisa de entrada nos parametros.
+*/
 exports.getUsuarios = async (req, res) => {
     const { data, error } = await supabase
         .from('usuarios')
@@ -11,9 +17,16 @@ exports.getUsuarios = async (req, res) => {
     res.json(data);
 };
 
-// REGISTER
+/*
+    REGISTER
+
+    Função responsável por criar o registro do usuários.
+    Entrada: Nome, Email e Senha.
+    As demais informações como "Role" sera criada de forma automática pelo banco
+    Criando por padrão um Viewer "sem permissão de criar novos usuários"
+*/
 exports.registerUsuario = async (req, res) => {
-    const { nome, email, password } = req.body;
+    const { nome, email, password, role } = req.body;
 
     if (!nome || !email || !password) {
         return res.status(400).json({ erro: 'Nome, email e senha são obrigatórios' });
@@ -50,7 +63,7 @@ exports.registerUsuario = async (req, res) => {
         // 3. Atualiza o nome na tabela usuarios
         const { data, error } = await supabase
             .from('usuarios')
-            .update({ nome })
+            .update({ nome, role: role || 'viewer' })
             .eq('id', userId)
             .select();
 

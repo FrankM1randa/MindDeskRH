@@ -1,5 +1,6 @@
 const express = require('express');
 const usuariosRoutes = require('./routes/usuarios.routes');
+const authRoutes = require('./routes/auth');
 
 //Leo
 const cors = require('cors');
@@ -17,6 +18,7 @@ app.use(express.json());
 
 // usa as rotas
 app.use('/usuarios', usuariosRoutes);
+app.use('/auth', authRoutes);
 
 //Leo
 app.use('/chat', chatRoutes); 
