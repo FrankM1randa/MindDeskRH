@@ -1,18 +1,22 @@
 //npm install axios
 //npm install cors
-
-
 const axios = require('axios');
 
-// No Docker, para um container falar com o outro no mesmo PC, 
-// usamos 'host.docker.internal' em vez de 'localhost' no Windows/Mac.
-const AI_URL = "http://host.docker.internal:8000/api/v1/ask";
+// AGORA APONTA PARA O ORQUESTRADOR (Porta 8050)
+const ORQUESTRADOR_URL = "http://host.docker.internal:8050/api/v1/orchestrate";
 
 exports.askAI = async (messageData) => {
     try {
-        const response = await axios.post(AI_URL, {
+        const response = await axios.post(ORQUESTRADOR_URL, {
             query: messageData.query,
             tenant_id: messageData.tenant_id,
+            
+            // Dados do usuário (Para o orquestrador saber quem é)
+            user_id: messageData.user_id,
+            role: messageData.role,
+            current_agent: messageData.current_agent,
+
+            // Chaves secretas que vão trafegar "escondidas"
             openai_api_key: process.env.OPENAI_API_KEY,
             supabase_url: process.env.SUPABASE_URL,
             supabase_key: process.env.SUPABASE_SERVICE_KEY

@@ -3,6 +3,7 @@ const router = express.Router();
 const aiService = require('../services/ai_service');
 
 router.post('/perguntar', async (req, res) => {
+    // O front-end antigo só manda query e tenant_id
     const { query, tenant_id } = req.body;
 
     if (!query) {
@@ -10,7 +11,15 @@ router.post('/perguntar', async (req, res) => {
     }
 
     try {
-        const resultado = await aiService.askAI({ query, tenant_id });
+        // Passamos os dados da tela + dados mockados para o teste rodar
+        const resultado = await aiService.askAI({ 
+            query, 
+            tenant_id,
+            user_id: "teste-123",        // Simula o ID do Supabase
+            role: "gerente",             // Simula que é gerente (para não ser bloqueado)
+            current_agent: "main"        // Diz que está no menu principal
+        });
+        
         res.json(resultado);
     } catch (error) {
         res.status(500).json({ erro: error.message });
