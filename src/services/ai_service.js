@@ -24,7 +24,21 @@ exports.askAI = async (messageData) => {
 
         return response.data;
     } catch (error) {
-        console.error("Erro ao chamar o Microsserviço de IA:", error.message);
+        // MUDE ESTA PARTE PARA VER O ERRO REAL
+        console.error("====== ERRO COMPLETO DO AXIOS ======");
+        if (error.response) {
+            // O servidor (Python) respondeu com um erro (ex: 422, 500)
+            console.error("Status:", error.response.status);
+            console.error("Dados:", error.response.data);
+        } else if (error.request) {
+            // A requisição saiu, mas não teve resposta (O Python não ouviu)
+            console.error("Nenhuma resposta do Python. Request:", error.request);
+        } else {
+            // Erro na hora de montar a requisição (ex: chave mal formatada no .env)
+            console.error("Erro interno do Node:", error.message);
+        }
+        console.error("====================================");
+
         throw new Error("A IA está fora do ar ou o endereço está incorreto.");
     }
 };
