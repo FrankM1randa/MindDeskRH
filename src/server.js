@@ -1,6 +1,8 @@
 const express = require('express');
 const usuariosRoutes = require('./routes/usuarios.routes');
 const authRoutes = require('./routes/auth');
+const pdfsRoutes = require('./routes/pdfs.routes');
+//Frank
 
 //Leo
 const cors = require('cors');
@@ -23,6 +25,8 @@ app.use('/auth', authRoutes);
 //Leo
 app.use('/chat', chatRoutes); 
 //Leo
+app.use('/pdfs', pdfsRoutes);
+//Frank
 
 // rota teste
 app.get('/', (req, res) => {
