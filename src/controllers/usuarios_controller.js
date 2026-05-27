@@ -26,14 +26,13 @@ exports.getUsuarios = async (req, res) => {
     Criando por padrão um Viewer "sem permissão de criar novos usuários"
 */
 exports.registerUsuario = async (req, res) => {
-    const { nome, email, password, role } = req.body;
+    const { nome, email, password, role, cargo } = req.body;
 
-    if (!nome || !email || !password) {
-        return res.status(400).json({ erro: 'Nome, email e senha são obrigatórios' });
+    if (!nome || !email || !password || !cargo) {
+        return res.status(400).json({ erro: 'Nome, email, senha e cargo são obrigatórios' });
     }
 
     try {
-        // 1. Cria usuário no auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email,
             password
@@ -50,20 +49,23 @@ exports.registerUsuario = async (req, res) => {
             return res.status(400).json({ erro: 'Usuário não retornado pelo auth' });
         }
 
-        // Verifica se email já existe
         if (authData.user.identities?.length === 0) {
             return res.status(400).json({ erro: 'E-mail já cadastrado' });
         }
 
         const userId = authData.user.id;
+        const data_contratacao = new Date().toISOString().split('T')[0]; // pega data atual do servidor
 
-        // 2. Aguarda o trigger executar
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        // 3. Atualiza o nome na tabela usuarios
         const { data, error } = await supabase
             .from('usuarios')
-            .update({ nome, role: role || 'viewer' })
+            .update({ 
+                nome, 
+                role: role || 'viewer',
+                cargo: cargo || null,
+                data_contratacao
+            })
             .eq('id', userId)
             .select();
 

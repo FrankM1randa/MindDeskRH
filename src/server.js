@@ -4,6 +4,8 @@ const authRoutes = require('./routes/auth');
 const pdfsRoutes = require('./routes/pdfs.routes');
 const pontosRoutes = require('./routes/pontos.routes');
 const relatoriosRoutes = require('./routes/relatorios.routes');
+const cursosRoutes = require('./routes/cursos.routes');
+const avisosRoutes = require('./routes/avisos.routes');
 //Frank
 
 //Leo
@@ -30,6 +32,8 @@ app.use('/chat', chatRoutes);
 app.use('/pdfs', pdfsRoutes);
 app.use('/pontos', pontosRoutes);
 app.use('/relatorios', relatoriosRoutes);
+app.use('/cursos', cursosRoutes);
+app.use('/avisos', avisosRoutes);
 //Frank
 
 // rota teste
