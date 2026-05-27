@@ -2,11 +2,13 @@ const express = require('express');
 const usuariosRoutes = require('./routes/usuarios.routes');
 const authRoutes = require('./routes/auth');
 const pdfsRoutes = require('./routes/pdfs.routes');
+const pontosRoutes = require('./routes/pontos.routes');
+const relatoriosRoutes = require('./routes/relatorios.routes');
 //Frank
 
 //Leo
 const cors = require('cors');
-const chatRoutes = require('./routes/chat.routes'); 
+const chatRoutes = require('./routes/chat.routes');
 //Leo
 
 const app = express();
@@ -26,6 +28,8 @@ app.use('/auth', authRoutes);
 app.use('/chat', chatRoutes); 
 //Leo
 app.use('/pdfs', pdfsRoutes);
+app.use('/pontos', pontosRoutes);
+app.use('/relatorios', relatoriosRoutes);
 //Frank
 
 // rota teste
