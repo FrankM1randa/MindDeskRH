@@ -4,15 +4,18 @@ const supabase = require('../config/supabase');
 // RELATÓRIO DE FALTAS
 // =========================================
 exports.relatorioFaltas = async (req, res) => {
+
     const { tenant_id, data_inicio, data_fim } = req.query;
 
     if (!tenant_id || !data_inicio || !data_fim) {
+
         return res.status(400).json({
             error: 'tenant_id, data_inicio e data_fim são obrigatórios.'
         });
     }
 
     try {
+
         const gerente_id = req.user.id;
 
         const { data: usuarios, error: usuariosError } = await supabase
@@ -22,12 +25,14 @@ exports.relatorioFaltas = async (req, res) => {
             .eq('gerente_id', gerente_id);
 
         if (usuariosError) {
+
             return res.status(500).json({
                 error: usuariosError.message
             });
         }
 
-        const usuariosIds = usuarios.map(u => u.id);
+        const usuariosIds =
+            usuarios.map(u => u.id);
 
         const { data: pontos, error: pontosError } = await supabase
             .from('pontos')
@@ -38,6 +43,7 @@ exports.relatorioFaltas = async (req, res) => {
             .lte('horario', `${data_fim}T23:59:59`);
 
         if (pontosError) {
+
             return res.status(500).json({
                 error: pontosError.message
             });
@@ -49,9 +55,11 @@ exports.relatorioFaltas = async (req, res) => {
         const fim = new Date(data_fim);
 
         while (atual <= fim) {
+
             const diaSemana = atual.getDay();
 
             if (diaSemana !== 0 && diaSemana !== 6) {
+
                 diasUteis.push(
                     atual.toISOString().split('T')[0]
                 );
@@ -105,6 +113,7 @@ exports.relatorioAtrasos = async (req, res) => {
     const { tenant_id, data_inicio, data_fim } = req.query;
 
     if (!tenant_id || !data_inicio || !data_fim) {
+
         return res.status(400).json({
             error: 'tenant_id, data_inicio e data_fim são obrigatórios.'
         });
@@ -121,12 +130,14 @@ exports.relatorioAtrasos = async (req, res) => {
             .eq('gerente_id', gerente_id);
 
         if (usuariosError) {
+
             return res.status(500).json({
                 error: usuariosError.message
             });
         }
 
-        const usuariosIds = usuarios.map(u => u.id);
+        const usuariosIds =
+            usuarios.map(u => u.id);
 
         const { data: pontos, error: pontosError } = await supabase
             .from('pontos')
@@ -138,6 +149,7 @@ exports.relatorioAtrasos = async (req, res) => {
             .lte('horario', `${data_fim}T23:59:59`);
 
         if (pontosError) {
+
             return res.status(500).json({
                 error: pontosError.message
             });
@@ -196,6 +208,7 @@ exports.relatorioBancoHoras = async (req, res) => {
     const { tenant_id, data_inicio, data_fim } = req.query;
 
     if (!tenant_id || !data_inicio || !data_fim) {
+
         return res.status(400).json({
             error: 'tenant_id, data_inicio e data_fim são obrigatórios.'
         });
@@ -212,12 +225,14 @@ exports.relatorioBancoHoras = async (req, res) => {
             .eq('gerente_id', gerente_id);
 
         if (usuariosError) {
+
             return res.status(500).json({
                 error: usuariosError.message
             });
         }
 
-        const usuariosIds = usuarios.map(u => u.id);
+        const usuariosIds =
+            usuarios.map(u => u.id);
 
         const { data: pontos, error: pontosError } = await supabase
             .from('pontos')
@@ -229,6 +244,7 @@ exports.relatorioBancoHoras = async (req, res) => {
             .order('horario', { ascending: true });
 
         if (pontosError) {
+
             return res.status(500).json({
                 error: pontosError.message
             });
@@ -240,12 +256,14 @@ exports.relatorioBancoHoras = async (req, res) => {
 
         pontos?.forEach(ponto => {
 
-            const dia = ponto.horario.split('T')[0];
+            const dia =
+                ponto.horario.split('T')[0];
 
             const chave =
                 `${ponto.usuario_id}_${dia}`;
 
             if (!porUsuarioDia[chave]) {
+
                 porUsuarioDia[chave] = {
                     usuario_id: ponto.usuario_id,
                     dia,
@@ -261,7 +279,7 @@ exports.relatorioBancoHoras = async (req, res) => {
         Object.values(porUsuarioDia).forEach(
             ({ usuario_id, dia, pontos }) => {
 
-                const get = (tipo) =>
+                const get = tipo =>
                     pontos.find(p => p.tipo === tipo);
 
                 const entrada = get('entrada');
@@ -271,12 +289,14 @@ exports.relatorioBancoHoras = async (req, res) => {
 
                 if (!entrada || !saida) return;
 
-                const toMin = (iso) => {
+                const toMin = iso => {
 
                     const d = new Date(iso);
 
-                    return d.getHours() * 60 +
-                        d.getMinutes();
+                    return (
+                        d.getHours() * 60 +
+                        d.getMinutes()
+                    );
                 };
 
                 let trabalhado =
@@ -327,13 +347,16 @@ exports.relatorioBancoHoras = async (req, res) => {
     }
 };
 
+
 // =========================================
 // RELATÓRIO DE FÉRIAS
 // =========================================
 exports.relatorioFerias = async (req, res) => {
+
     const { tenant_id } = req.query;
 
     if (!tenant_id) {
+
         return res.status(400).json({
             error: 'tenant_id é obrigatório.'
         });
@@ -343,140 +366,374 @@ exports.relatorioFerias = async (req, res) => {
 
         const gerente_id = req.user.id;
 
-        const { data: usuarios } = await supabase
+        // =========================
+        // FUNCIONÁRIOS
+        // =========================
+
+        const { data: usuarios, error: usuariosError } = await supabase
             .from('usuarios')
-            .select('id')
+            .select(`
+                id,
+                nome,
+                email,
+                cargo
+            `)
             .eq('tenant_id', tenant_id)
             .eq('gerente_id', gerente_id);
 
-        const usuariosIds = usuarios.map(u => u.id);
+        if (usuariosError) {
 
-        const hoje = new Date();
-
-        const { data, error } = await supabase
-            .from('ferias')
-            .select(`
-                *,
-                usuarios(
-                    nome,
-                    email,
-                    cargo,
-                    data_contratacao
-                )
-            `)
-            .eq('tenant_id', tenant_id)
-            .in('usuario_id', usuariosIds)
-            .order('created_at', {
-                ascending: false
-            });
-
-        if (error) {
             return res.status(500).json({
-                error: error.message
+                error: usuariosError.message
             });
         }
 
-        // remove registros duplicados
-        const mapaFuncionarios = {};
+        const usuariosIds =
+            usuarios.map(u => u.id);
 
-        data.forEach(item => {
+        // =========================
+        // FÉRIAS
+        // =========================
 
-            if (!mapaFuncionarios[item.usuario_id]) {
-                mapaFuncionarios[item.usuario_id] = item;
+        const { data: ferias, error: feriasError } = await supabase
+            .from('ferias')
+            .select('*')
+            .eq('tenant_id', tenant_id)
+            .in('usuario_id', usuariosIds)
+            .order('data_ferias_prevista', {
+                ascending: true
+            });
+
+        if (feriasError) {
+
+            return res.status(500).json({
+                error: feriasError.message
+            });
+        }
+
+        const hoje = new Date();
+
+        const relatorio = usuarios.map(usuario => {
+
+            const feriasUsuario =
+                ferias.filter(
+                    f => f.usuario_id === usuario.id
+                );
+
+            // =========================
+            // PENDENTES
+            // =========================
+
+            const pendentes =
+                feriasUsuario.filter(
+                    f => f.status_ferias === 'pendente'
+                );
+
+            // =========================
+            // CUMPRIDAS
+            // =========================
+
+            const cumpridas =
+                feriasUsuario.filter(
+                    f => f.status_ferias === 'cumprida'
+                );
+
+            // =========================
+            // ÚLTIMA FÉRIAS CUMPRIDA
+            // =========================
+
+            const ultimaCumprida =
+                cumpridas.length > 0
+                    ? cumpridas.reduce(
+                        (maisRecente, atual) => {
+
+                            const dataMaisRecente =
+                                new Date(
+                                    maisRecente.data_fim ||
+                                    maisRecente.data_inicio
+                                );
+
+                            const dataAtual =
+                                new Date(
+                                    atual.data_fim ||
+                                    atual.data_inicio
+                                );
+
+                            return dataAtual > dataMaisRecente
+                                ? atual
+                                : maisRecente;
+                        }
+                    )
+                    : null;
+
+            // =========================
+            // FÉRIAS PENDENTE MAIS ANTIGA
+            // =========================
+
+            const maisAntigaPendente =
+                pendentes.length > 0
+                    ? pendentes.reduce(
+                        (maisAntiga, atual) => {
+
+                            const dataAntiga =
+                                new Date(
+                                    maisAntiga.data_ferias_prevista
+                                );
+
+                            const dataAtual =
+                                new Date(
+                                    atual.data_ferias_prevista
+                                );
+
+                            return dataAtual < dataAntiga
+                                ? atual
+                                : maisAntiga;
+                        }
+                    )
+                    : null;
+
+            // =========================
+            // BASE PARA VENCIMENTO
+            // =========================
+
+            let dataBase = null;
+
+            // funcionário já tirou férias
+            if (ultimaCumprida) {
+
+                dataBase =
+                    ultimaCumprida.data_fim ||
+                    ultimaCumprida.data_inicio;
             }
-        });
 
-        const relatorio = Object.values(mapaFuncionarios)
-            .map(ferias => {
+            // funcionário nunca tirou férias
+            else if (pendentes.length > 0) {
 
-                let alerta = null;
-                let prioridade = 0;
+                const primeiraPendente =
+                    pendentes.reduce(
+                        (maisAntiga, atual) => {
 
-                const dataContratacao =
-                    ferias.usuarios?.data_contratacao;
+                            const dataAntiga =
+                                new Date(
+                                    maisAntiga.data_registro
+                                );
 
-                let statusVisual = 'Em dia';
+                            const dataAtual =
+                                new Date(
+                                    atual.data_registro
+                                );
 
-                if (dataContratacao) {
-
-                    const admissao = new Date(
-                        dataContratacao
+                            return dataAtual < dataAntiga
+                                ? atual
+                                : maisAntiga;
+                        }
                     );
 
-                    const mesesEmpresa =
-                        (hoje.getFullYear() - admissao.getFullYear()) * 12 +
-                        (hoje.getMonth() - admissao.getMonth());
+                dataBase =
+                    primeiraPendente.data_registro;
+            }
 
-                    // funcionário já pode tirar férias
-                    if (mesesEmpresa >= 12) {
+            // =========================
+            // DATA VENCIMENTO
+            // =========================
 
-                        const mesesAtraso =
-                            mesesEmpresa - 12;
+            let dataVencimento = null;
 
-                        if (mesesAtraso >= 8) {
+            if (dataBase) {
 
-                            statusVisual = 'Crítica';
+                dataVencimento =
+                    new Date(dataBase);
 
-                            prioridade = 1;
-
-                            alerta = {
-                                nivel: 'critico',
-                                mensagem:
-                                    'Férias muito atrasadas'
-                            };
-
-                        } else if (mesesAtraso >= 5) {
-
-                            statusVisual = 'Atrasada';
-
-                            prioridade = 2;
-
-                            alerta = {
-                                nivel: 'urgente',
-                                mensagem:
-                                    'Férias atrasadas'
-                            };
-
-                        } else if (mesesAtraso >= 2) {
-
-                            statusVisual = 'Pendente';
-
-                            prioridade = 3;
-
-                            alerta = {
-                                nivel: 'aviso',
-                                mensagem:
-                                    'Férias pendentes'
-                            };
-
-                        } else {
-
-                            statusVisual = 'Em dia';
-
-                            prioridade = 4;
-                        }
-                    }
-                }
-
-                return {
-                    ...ferias,
-                    status_visual: statusVisual,
-                    prioridade,
-                    alerta
-                };
-            })
-
-            // ordena prioridade
-            .sort((a, b) => {
-
-                if (a.prioridade !== b.prioridade) {
-                    return a.prioridade - b.prioridade;
-                }
-
-                return a.usuarios.nome.localeCompare(
-                    b.usuarios.nome
+                dataVencimento.setMonth(
+                    dataVencimento.getMonth() + 12
                 );
-            });
+            }
+
+           // =========================
+// =========================
+// MESES PENDENTES
+// =========================
+
+let mesesPendente = 0;
+
+// =========================
+// FUNCIONÁRIO JÁ TIROU FÉRIAS
+// =========================
+
+if (
+    ultimaCumprida &&
+    maisAntigaPendente?.data_ferias_prevista
+) {
+
+    const dataPrevista =
+        new Date(
+            maisAntigaPendente.data_ferias_prevista
+        );
+
+    mesesPendente =
+        (
+            hoje.getFullYear() -
+            dataPrevista.getFullYear()
+        ) * 12;
+
+    mesesPendente +=
+        hoje.getMonth() -
+        dataPrevista.getMonth();
+}
+
+// =========================
+// FUNCIONÁRIO NUNCA TIROU FÉRIAS
+// =========================
+
+else if (dataBase) {
+
+    const vencimento =
+        new Date(dataBase);
+
+    vencimento.setMonth(
+        vencimento.getMonth() + 12
+    );
+
+    mesesPendente =
+        (
+            hoje.getFullYear() -
+            vencimento.getFullYear()
+        ) * 12;
+
+    mesesPendente +=
+        hoje.getMonth() -
+        vencimento.getMonth();
+
+    if (mesesPendente < 0) {
+        mesesPendente = 0;
+    }
+}
+
+            // =========================
+            // SITUAÇÃO / AVISO
+            // =========================
+
+            let situacao = 'Em dia';
+
+            let aviso =
+                'Funcionário com situação regular.';
+
+            let prioridade = 'baixa';
+
+            if (mesesPendente >= 20) {
+
+                situacao =
+                    'Muito atrasada';
+
+                prioridade =
+                    'critica';
+
+                aviso =
+                    'Funcionário possui férias a vencer. Caso não marque nos próximos 30 dias, será realizada marcação compulsória.';
+
+            } else if (mesesPendente >= 16) {
+
+                situacao =
+                    'Atrasada';
+
+                prioridade =
+                    'alta';
+
+                aviso =
+                    'Funcionário possui férias pendentes com prazo curto para agendamento.';
+
+            } else if (mesesPendente >= 12) {
+
+                situacao =
+                    'Disponível';
+
+                prioridade =
+                    'media';
+
+                aviso =
+                    'Funcionário possui férias disponíveis para agendamento.';
+            }
+
+            return {
+
+                usuario_id:
+                    usuario.id,
+
+                nome:
+                    usuario.nome,
+
+                email:
+                    usuario.email,
+
+                cargo:
+                    usuario.cargo,
+
+                // =====================
+                // FRONTEND
+                // =====================
+
+                data_ultima_ferias:
+                    ultimaCumprida?.data_fim ||
+                    ultimaCumprida?.data_inicio ||
+                    null,
+
+                data_vencimento_ferias:
+                    dataVencimento
+                        ?.toISOString()
+                        .split('T')[0] || null,
+
+                // =====================
+                // CONTROLE
+                // =====================
+
+                ferias_pendentes:
+                    pendentes.length,
+
+                ferias_cumpridas:
+                    cumpridas.length,
+
+                meses_pendente:
+                    mesesPendente,
+
+                // =====================
+                // STATUS
+                // =====================
+
+                situacao,
+                aviso,
+                prioridade
+            };
+        });
+
+        // =========================
+        // ORDENAÇÃO
+        // =========================
+
+        const ordemPrioridade = {
+            critica: 0,
+            alta: 1,
+            media: 2,
+            baixa: 3
+        };
+
+        relatorio.sort((a, b) => {
+
+            const prioridadeA =
+                ordemPrioridade[a.prioridade] ?? 99;
+
+            const prioridadeB =
+                ordemPrioridade[b.prioridade] ?? 99;
+
+            if (prioridadeA !== prioridadeB) {
+
+                return prioridadeA - prioridadeB;
+            }
+
+            return (
+                (b.meses_pendente || 0) -
+                (a.meses_pendente || 0)
+            );
+        });
 
         return res.json(relatorio);
 
@@ -497,6 +754,7 @@ exports.relatorioAfastamentos = async (req, res) => {
     const { tenant_id } = req.query;
 
     if (!tenant_id) {
+
         return res.status(400).json({
             error: 'tenant_id é obrigatório.'
         });
@@ -512,7 +770,8 @@ exports.relatorioAfastamentos = async (req, res) => {
             .eq('tenant_id', tenant_id)
             .eq('gerente_id', gerente_id);
 
-        const usuariosIds = usuarios.map(u => u.id);
+        const usuariosIds =
+            usuarios.map(u => u.id);
 
         const hoje =
             new Date().toISOString().split('T')[0];
@@ -526,6 +785,7 @@ exports.relatorioAfastamentos = async (req, res) => {
             .gte('data_emissao', hoje);
 
         if (error) {
+
             return res.status(500).json({
                 error: error.message
             });
@@ -533,9 +793,8 @@ exports.relatorioAfastamentos = async (req, res) => {
 
         const relatorio = data.map(atestado => {
 
-            const dataFim = new Date(
-                atestado.data_emissao
-            );
+            const dataFim =
+                new Date(atestado.data_emissao);
 
             dataFim.setDate(
                 dataFim.getDate() +

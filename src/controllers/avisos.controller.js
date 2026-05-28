@@ -1,6 +1,7 @@
 const supabase = require('../config/supabase');
 
 exports.listarAvisos = async (req, res) => {
+
     const gerente_id = req.user.id;
     const tenant_id = req.user.tenant_id;
 
@@ -11,10 +12,14 @@ exports.listarAvisos = async (req, res) => {
     }
 
     try {
+
         const avisos = [];
         const hoje = new Date();
 
-        // Busca funcionários do gerente logado
+        // =========================
+        // FUNCIONÁRIOS DO GERENTE
+        // =========================
+
         const { data: usuarios, error: userError } = await supabase
             .from('usuarios')
             .select(`
@@ -28,19 +33,21 @@ exports.listarAvisos = async (req, res) => {
             .eq('gerente_id', gerente_id);
 
         if (userError) {
+
             return res.status(500).json({
                 error: userError.message
             });
         }
 
-        const usuarioIds = usuarios?.map(u => u.id) || [];
+        const usuarioIds =
+            usuarios?.map(u => u.id) || [];
 
         if (usuarioIds.length === 0) {
             return res.json([]);
         }
 
         // =========================
-        // FÉRIAS PENDENTES
+        // FÉRIAS
         // =========================
 
         const { data: ferias, error: feriasError } = await supabase
@@ -49,7 +56,8 @@ exports.listarAvisos = async (req, res) => {
                 *,
                 usuarios (
                     nome,
-                    cargo
+                    cargo,
+                    gerente_geral
                 )
             `)
             .eq('tenant_id', tenant_id)
@@ -60,45 +68,83 @@ exports.listarAvisos = async (req, res) => {
             });
 
         if (feriasError) {
+
             return res.status(500).json({
                 error: feriasError.message
             });
         }
 
+        // pega somente a férias MAIS ANTIGA
+        // de cada funcionário
+        const mapaFerias = {};
+
         ferias?.forEach(f => {
 
             if (!f.data_ferias_prevista) return;
 
-            const dataPrevista = new Date(f.data_ferias_prevista);
+            const atual =
+                mapaFerias[f.usuario_id];
 
-            const mesesPendente = Math.floor(
-                (hoje - dataPrevista) /
-                (1000 * 60 * 60 * 24 * 30)
-            );
+            if (!atual) {
+
+                mapaFerias[f.usuario_id] = f;
+                return;
+            }
+
+            const atualData =
+                new Date(atual.data_ferias_prevista);
+
+            const novaData =
+                new Date(f.data_ferias_prevista);
+
+            if (novaData < atualData) {
+
+                mapaFerias[f.usuario_id] = f;
+            }
+        });
+
+        Object.values(mapaFerias).forEach(f => {
+
+            const dataPrevista =
+                new Date(f.data_ferias_prevista);
+
+            // cálculo REAL de meses
+            let mesesPendente =
+                (hoje.getFullYear() - dataPrevista.getFullYear()) * 12;
+
+            mesesPendente +=
+                hoje.getMonth() - dataPrevista.getMonth();
 
             let mensagem = null;
             let prioridade = null;
+            let status = null;
 
-            if (mesesPendente > 20) {
+            if (mesesPendente >= 20) {
 
                 mensagem =
                     `${f.usuarios?.nome} possui férias a vencer. Caso não marque nos próximos 30 dias, será realizada marcação de férias compulsórias.`;
 
                 prioridade = 'critica';
 
-            } else if (mesesPendente > 16) {
+                status = 'Férias a vencer';
+
+            } else if (mesesPendente >= 16) {
 
                 mensagem =
                     `${f.usuarios?.nome} tem férias pendentes de agendamento com prazo curto. Favor agendar as férias.`;
 
                 prioridade = 'alta';
 
-            } else if (mesesPendente > 12) {
+                status = 'Prazo curto';
+
+            } else if (mesesPendente >= 12) {
 
                 mensagem =
                     `${f.usuarios?.nome} possui férias disponíveis para agendar.`;
 
                 prioridade = 'media';
+
+                status = 'Disponível';
             }
 
             if (mensagem) {
@@ -106,13 +152,15 @@ exports.listarAvisos = async (req, res) => {
                 avisos.push({
                     tipo: 'férias',
                     prioridade,
+                    status,
                     usuario_id: f.usuario_id,
                     nome: f.usuarios?.nome || 'Funcionário',
                     cargo: f.usuarios?.cargo || '-',
+                    gerente_geral:
+                        f.usuarios?.gerente_geral || null,
                     mensagem,
                     meses_pendente: mesesPendente,
-                    data_prevista: f.data_ferias_prevista,
-                    dias_restantes: 0
+                    data_prevista: f.data_ferias_prevista
                 });
             }
         });
@@ -134,6 +182,7 @@ exports.listarAvisos = async (req, res) => {
             .in('usuario_id', usuarioIds);
 
         if (atestadoError) {
+
             return res.status(500).json({
                 error: atestadoError.message
             });
@@ -143,16 +192,18 @@ exports.listarAvisos = async (req, res) => {
 
             if (!atestado.data_emissao) return;
 
-            const dataEmissao = new Date(atestado.data_emissao);
+            const dataEmissao =
+                new Date(atestado.data_emissao);
 
-            const dataFim = new Date(dataEmissao);
+            const dataFim =
+                new Date(dataEmissao);
 
             dataFim.setDate(
                 dataFim.getDate() +
                 Number(atestado.dias_afastamento || 0)
             );
 
-            // Apenas afastamentos ainda ativos
+            // apenas afastamentos ativos
             if (dataFim >= hoje) {
 
                 const diasRestantes = Math.ceil(
@@ -164,12 +215,18 @@ exports.listarAvisos = async (req, res) => {
                     tipo: 'afastamento',
                     prioridade: 'alta',
                     usuario_id: atestado.usuario_id,
-                    nome: atestado.usuarios?.nome || 'Funcionário',
-                    cargo: atestado.usuarios?.cargo || '-',
+                    nome:
+                        atestado.usuarios?.nome ||
+                        'Funcionário',
+                    cargo:
+                        atestado.usuarios?.cargo || '-',
                     mensagem:
                         `${atestado.usuarios?.nome} está afastado(a) por ${atestado.dias_afastamento} dia(s). Retorno previsto em ${diasRestantes} dia(s).`,
                     dias_restantes: diasRestantes,
-                    data_fim: dataFim.toISOString().split('T')[0]
+                    data_fim:
+                        dataFim
+                            .toISOString()
+                            .split('T')[0]
                 });
             }
         });
@@ -193,6 +250,7 @@ exports.listarAvisos = async (req, res) => {
                 ordemPrioridade[b.prioridade] ?? 99;
 
             if (prioridadeA !== prioridadeB) {
+
                 return prioridadeA - prioridadeB;
             }
 
@@ -244,40 +302,52 @@ exports.listarAvisosFuncionario = async (req, res) => {
             });
         }
 
-        ferias?.forEach(f => {
+        // pega somente a pendente MAIS ANTIGA
+        const feriasMaisAntiga = ferias?.[0];
 
-            if (!f.data_ferias_prevista) return;
+        if (feriasMaisAntiga?.data_ferias_prevista) {
 
-            const dataPrevista = new Date(f.data_ferias_prevista);
+            const dataPrevista =
+                new Date(
+                    feriasMaisAntiga.data_ferias_prevista
+                );
 
-            const mesesPendente = Math.floor(
-                (hoje - dataPrevista) /
-                (1000 * 60 * 60 * 24 * 30)
-            );
+            let mesesPendente =
+                (hoje.getFullYear() - dataPrevista.getFullYear()) * 12;
+
+            mesesPendente +=
+                hoje.getMonth() - dataPrevista.getMonth();
 
             let mensagem = null;
             let prioridade = null;
+            let status = null;
 
-            if (mesesPendente > 20) {
+            if (mesesPendente >= 20) {
 
                 mensagem =
                     'Você possui férias a vencer. Caso não marque nos próximos 30 dias, será realizada marcação de férias compulsórias.';
 
                 prioridade = 'critica';
 
-            } else if (mesesPendente > 16) {
+                status = 'Férias a vencer';
+
+            } else if (mesesPendente >= 16) {
 
                 mensagem =
                     'Você tem férias pendentes de agendamento com prazo curto. Favor agendar suas férias.';
 
                 prioridade = 'alta';
 
-            } else if (mesesPendente > 12) {
+                status = 'Prazo curto';
+
+            } else if (mesesPendente >= 12) {
 
                 mensagem =
                     'Você possui férias disponíveis para agendar.';
 
                 prioridade = 'media';
+
+                status = 'Disponível';
             }
 
             if (mensagem) {
@@ -285,13 +355,15 @@ exports.listarAvisosFuncionario = async (req, res) => {
                 avisos.push({
                     tipo: 'férias',
                     prioridade,
+                    status,
                     mensagem,
                     meses_pendente: mesesPendente,
-                    data_prevista: f.data_ferias_prevista,
+                    data_prevista:
+                        feriasMaisAntiga.data_ferias_prevista,
                     dias_restantes: 0
                 });
             }
-        });
+        }
 
         // =========================
         // AFASTAMENTOS
@@ -314,9 +386,11 @@ exports.listarAvisosFuncionario = async (req, res) => {
 
             if (!atestado.data_emissao) return;
 
-            const dataEmissao = new Date(atestado.data_emissao);
+            const dataEmissao =
+                new Date(atestado.data_emissao);
 
-            const dataFim = new Date(dataEmissao);
+            const dataFim =
+                new Date(dataEmissao);
 
             dataFim.setDate(
                 dataFim.getDate() +
@@ -336,7 +410,10 @@ exports.listarAvisosFuncionario = async (req, res) => {
                     mensagem:
                         `Você está afastado(a). Retorno previsto em ${diasRestantes} dia(s).`,
                     dias_restantes: diasRestantes,
-                    data_fim: dataFim.toISOString().split('T')[0]
+                    data_fim:
+                        dataFim
+                            .toISOString()
+                            .split('T')[0]
                 });
             }
         });
@@ -360,6 +437,7 @@ exports.listarAvisosFuncionario = async (req, res) => {
                 ordemPrioridade[b.prioridade] ?? 99;
 
             if (prioridadeA !== prioridadeB) {
+
                 return prioridadeA - prioridadeB;
             }
 
