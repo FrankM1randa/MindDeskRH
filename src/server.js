@@ -6,6 +6,7 @@ const pontosRoutes = require('./routes/pontos.routes');
 const relatoriosRoutes = require('./routes/relatorios.routes');
 const cursosRoutes = require('./routes/cursos.routes');
 const avisosRoutes = require('./routes/avisos.routes');
+const atestadoRoutes = require('./routes/atestados.routes')
 //Frank
 
 //Leo
@@ -34,6 +35,7 @@ app.use('/pontos', pontosRoutes);
 app.use('/relatorios', relatoriosRoutes);
 app.use('/cursos', cursosRoutes);
 app.use('/avisos', avisosRoutes);
+app.use ('/atestados',atestadoRoutes);
 //Frank
 
 // rota teste
