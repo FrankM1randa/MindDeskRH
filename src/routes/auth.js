@@ -20,11 +20,9 @@ router.post('/register', async (req, res) => {
 
     await supabase.from('usuarios').update({ nome, role: 'viewer' }).eq('id', data.user.id)
     return res.status(201).json({ message: 'Usuário criado!', user: data.user })
-
 })
 
-//Registro protegido - só admin cria outro admin
-
+// Registro protegido - só admin cria outro admin
 router.post('/register/admin', authMiddleware, adminMiddleware, async (req, res) => {
     const { email, password, nome } = req.body
 
@@ -92,4 +90,43 @@ router.post('/login', async (req, res) => {
     });
 });
 
-module.exports = router
+/* ===================================================
+    NOVA ROTA: ALTERAÇÃO DE SENHA (PUT /senha)
+    ===================================================
+*/
+router.put('/senha', authMiddleware, async (req, res) => {
+    const { novaSenha } = req.body;
+
+    if (!novaSenha || novaSenha.length < 6) {
+        return res.status(400).json({ 
+            error: 'A nova senha deve possuir ao menos 6 caracteres.' 
+        });
+    }
+
+    try {
+        // O authMiddleware injeta o ID decodificado do JWT em req.user.id
+        const { error } = await supabase.auth.admin.updateUserById(
+            req.user.id,
+            { password: novaSenha }
+        );
+
+        if (error) {
+            return res.status(400).json({ 
+                error: 'Erro ao atualizar a senha no Supabase.', 
+                detalhe: error.message 
+            });
+        }
+
+        return res.status(200).json({ 
+            message: 'Senha alterada com sucesso!' 
+        });
+
+    } catch (err) {
+        return res.status(500).json({ 
+            error: 'Erro interno no servidor.', 
+            detalhe: err.message 
+        });
+    }
+});
+
+module.exports = router;

@@ -1,5 +1,3 @@
-//npm install axios
-//npm install cors
 const axios = require('axios');
 
 // AGORA APONTA PARA O ORQUESTRADOR (Porta 8050)
@@ -11,8 +9,8 @@ exports.askAI = async (messageData) => {
             query: messageData.query,
             tenant_id: messageData.tenant_id,
             
-            // Dados do usuário (Para o orquestrador saber quem é)
-            user_id: messageData.user_id,
+            // ATENÇÃO AQUI: Mudado para 'usuario_id' para bater com o Pydantic do Python
+            usuario_id: messageData.usuario_id, 
             role: messageData.role,
             current_agent: messageData.current_agent,
 
@@ -22,19 +20,16 @@ exports.askAI = async (messageData) => {
             supabase_key: process.env.SUPABASE_SERVICE_KEY
         });
 
+        // Retorna a resposta do Python (Que contém { answer, new_agent, action })
         return response.data;
     } catch (error) {
-        // MUDE ESTA PARTE PARA VER O ERRO REAL
         console.error("====== ERRO COMPLETO DO AXIOS ======");
         if (error.response) {
-            // O servidor (Python) respondeu com um erro (ex: 422, 500)
             console.error("Status:", error.response.status);
             console.error("Dados:", error.response.data);
         } else if (error.request) {
-            // A requisição saiu, mas não teve resposta (O Python não ouviu)
             console.error("Nenhuma resposta do Python. Request:", error.request);
         } else {
-            // Erro na hora de montar a requisição (ex: chave mal formatada no .env)
             console.error("Erro interno do Node:", error.message);
         }
         console.error("====================================");

@@ -1,459 +1,275 @@
 const supabase = require('../config/supabase');
 
-exports.listarAvisos = async (req, res) => {
+// =========================================
+// HELPER: Calcula situação de férias (Lógica Blindada)
+// =========================================
+function calcularSituacaoFerias(pendenteMaisAntiga) {
+    if (!pendenteMaisAntiga || !pendenteMaisAntiga.data_ferias_prevista) {
+        return null; // Sem pendências, sem avisos
+    }
 
+    const hoje = new Date();
+    const fimAquisitivo = new Date(pendenteMaisAntiga.data_ferias_prevista);
+
+    const dataVencimento = new Date(fimAquisitivo);
+    dataVencimento.setMonth(dataVencimento.getMonth() + 12);
+
+    const inicioAquisitivo = new Date(fimAquisitivo);
+    inicioAquisitivo.setMonth(inicioAquisitivo.getMonth() - 12);
+
+    let mesesDesdeInicio =
+        (hoje.getFullYear() - inicioAquisitivo.getFullYear()) * 12 +
+        (hoje.getMonth() - inicioAquisitivo.getMonth());
+
+    let situacao, aviso, aviso_funcionario, prioridade;
+
+    if (hoje >= dataVencimento) {
+        situacao = 'Crítica';
+        prioridade = 'critica';
+        aviso = 'Férias vencidas. Risco de marcação compulsória e pagamento em dobro.';
+        aviso_funcionario = 'Atenção! Suas férias estão vencidas. Procure o RH urgentemente.';
+    } else if (mesesDesdeInicio >= 20) {
+        situacao = 'Atrasada';
+        prioridade = 'alta';
+        aviso = 'Férias a vencer em breve. Risco de compulsória nos próximos dias.';
+        aviso_funcionario = 'Suas férias estão quase vencendo! Fale com seu gestor para agendar.';
+    } else if (mesesDesdeInicio >= 16) {
+        situacao = 'Atrasada';
+        prioridade = 'alta';
+        aviso = 'Férias pendentes com prazo curto para agendamento.';
+        aviso_funcionario = 'Você tem férias pendentes. Que tal planejar seu descanso?';
+    } else if (mesesDesdeInicio >= 12) {
+        situacao = 'Disponível';
+        prioridade = 'media';
+        aviso = 'Férias disponíveis para agendamento.';
+        aviso_funcionario = 'Oba! Suas férias já estão disponíveis para serem agendadas.';
+    } else if (mesesDesdeInicio >= 10) {
+        situacao = 'Disponível em breve';
+        prioridade = 'baixa';
+        aviso = `Férias disponíveis em ${12 - mesesDesdeInicio} mês(es).`;
+        aviso_funcionario = `Faltam ${12 - mesesDesdeInicio} mês(es) para suas férias ficarem disponíveis.`;
+    } else {
+        return null; // Tudo super em dia, não poluir o mural
+    }
+
+    return {
+        situacao,
+        aviso, // Para o Gerente
+        aviso_funcionario, // Para o Funcionário
+        prioridade,
+        meses_referencia: mesesDesdeInicio,
+        data_vencimento: dataVencimento.toISOString().split('T')[0]
+    };
+}
+
+// =========================================
+// MURAL DO GERENTE
+// =========================================
+exports.listarAvisos = async (req, res) => {
     const gerente_id = req.user.id;
     const tenant_id = req.user.tenant_id;
 
-    if (!tenant_id) {
-        return res.status(403).json({
-            error: 'Tenant inválido.'
-        });
-    }
+    if (!tenant_id) return res.status(403).json({ error: 'Tenant inválido.' });
 
     try {
-
         const avisos = [];
+        // Normaliza "hoje" para meia-noite, evitando bugs de fuso horário
         const hoje = new Date();
-
-        // =========================
-        // FUNCIONÁRIOS DO GERENTE
-        // =========================
+        const hojeDataStr = hoje.toISOString().split('T')[0];
+        const hojeDataNormalizada = new Date(hojeDataStr);
 
         const { data: usuarios, error: userError } = await supabase
             .from('usuarios')
-            .select(`
-                id,
-                nome,
-                cargo,
-                gerente_id,
-                tenant_id
-            `)
+            .select('id, nome, cargo, gerente_id, tenant_id')
             .eq('tenant_id', tenant_id)
             .eq('gerente_id', gerente_id);
 
-        if (userError) {
+        if (userError) return res.status(500).json({ error: userError.message });
 
-            return res.status(500).json({
-                error: userError.message
-            });
-        }
+        const usuarioIds = usuarios?.map(u => u.id) || [];
+        if (usuarioIds.length === 0) return res.json([]);
 
-        const usuarioIds =
-            usuarios?.map(u => u.id) || [];
-
-        if (usuarioIds.length === 0) {
-            return res.json([]);
-        }
-
-        // =========================
-        // FÉRIAS
-        // =========================
-
-        const { data: ferias, error: feriasError } = await supabase
+        // 1. PROCESSAR AVISOS DE FÉRIAS
+        const { data: todasFerias, error: feriasError } = await supabase
             .from('ferias')
-            .select(`
-                *,
-                usuarios (
-                    nome,
-                    cargo,
-                    gerente_geral
-                )
-            `)
+            .select('*, usuarios(nome, cargo, gerente_geral)')
             .eq('tenant_id', tenant_id)
-            .eq('status_ferias', 'pendente')
             .in('usuario_id', usuarioIds)
-            .order('data_ferias_prevista', {
-                ascending: true
-            });
+            .eq('status_ferias', 'pendente'); // Trazemos só as pendentes para performance
 
-        if (feriasError) {
+        if (feriasError) return res.status(500).json({ error: feriasError.message });
 
-            return res.status(500).json({
-                error: feriasError.message
-            });
-        }
-
-        // pega somente a férias MAIS ANTIGA
-        // de cada funcionário
-        const mapaFerias = {};
-
-        ferias?.forEach(f => {
-
-            if (!f.data_ferias_prevista) return;
-
-            const atual =
-                mapaFerias[f.usuario_id];
-
-            if (!atual) {
-
-                mapaFerias[f.usuario_id] = f;
-                return;
+        const feriasPorUsuario = {};
+        todasFerias?.forEach(f => {
+            if (!feriasPorUsuario[f.usuario_id]) {
+                feriasPorUsuario[f.usuario_id] = { pendentes: [], usuario: f.usuarios };
             }
-
-            const atualData =
-                new Date(atual.data_ferias_prevista);
-
-            const novaData =
-                new Date(f.data_ferias_prevista);
-
-            if (novaData < atualData) {
-
-                mapaFerias[f.usuario_id] = f;
-            }
+            feriasPorUsuario[f.usuario_id].pendentes.push(f);
         });
 
-        Object.values(mapaFerias).forEach(f => {
+        Object.entries(feriasPorUsuario).forEach(([usuario_id, { pendentes, usuario }]) => {
+            const pendenteMaisAntiga = pendentes.reduce((maisAntiga, atual) => {
+                return new Date(atual.data_ferias_prevista) < new Date(maisAntiga.data_ferias_prevista)
+                    ? atual
+                    : maisAntiga;
+            });
 
-            const dataPrevista =
-                new Date(f.data_ferias_prevista);
+            const calc = calcularSituacaoFerias(pendenteMaisAntiga);
 
-            // cálculo REAL de meses
-            let mesesPendente =
-                (hoje.getFullYear() - dataPrevista.getFullYear()) * 12;
-
-            mesesPendente +=
-                hoje.getMonth() - dataPrevista.getMonth();
-
-            let mensagem = null;
-            let prioridade = null;
-            let status = null;
-
-            if (mesesPendente >= 20) {
-
-                mensagem =
-                    `${f.usuarios?.nome} possui férias a vencer. Caso não marque nos próximos 30 dias, será realizada marcação de férias compulsórias.`;
-
-                prioridade = 'critica';
-
-                status = 'Férias a vencer';
-
-            } else if (mesesPendente >= 16) {
-
-                mensagem =
-                    `${f.usuarios?.nome} tem férias pendentes de agendamento com prazo curto. Favor agendar as férias.`;
-
-                prioridade = 'alta';
-
-                status = 'Prazo curto';
-
-            } else if (mesesPendente >= 12) {
-
-                mensagem =
-                    `${f.usuarios?.nome} possui férias disponíveis para agendar.`;
-
-                prioridade = 'media';
-
-                status = 'Disponível';
-            }
-
-            if (mensagem) {
-
+            if (calc && calc.aviso) {
+                const nomeFunc = usuario?.nome || 'Funcionário';
                 avisos.push({
                     tipo: 'férias',
-                    prioridade,
-                    status,
-                    usuario_id: f.usuario_id,
-                    nome: f.usuarios?.nome || 'Funcionário',
-                    cargo: f.usuarios?.cargo || '-',
-                    gerente_geral:
-                        f.usuarios?.gerente_geral || null,
-                    mensagem,
-                    meses_pendente: mesesPendente,
-                    data_prevista: f.data_ferias_prevista
+                    prioridade: calc.prioridade,
+                    status: calc.situacao,
+                    usuario_id,
+                    nome: nomeFunc,
+                    cargo: usuario?.cargo || '-',
+                    mensagem: `${nomeFunc}: ${calc.aviso}`,
+                    meses_referencia: calc.meses_referencia,
+                    data_vencimento: calc.data_vencimento
                 });
             }
         });
 
-        // =========================
-        // AFASTAMENTOS / ATESTADOS
-        // =========================
-
+        // 2. PROCESSAR AVISOS DE ATESTADOS
         const { data: atestados, error: atestadoError } = await supabase
             .from('atestados')
-            .select(`
-                *,
-                usuarios (
-                    nome,
-                    cargo
-                )
-            `)
+            .select('*, usuarios(nome, cargo)')
             .eq('tenant_id', tenant_id)
-            .in('usuario_id', usuarioIds);
+            .in('usuario_id', usuarioIds)
+            .eq('status', 'aprovado'); // Filtra apenas atestados validados
 
-        if (atestadoError) {
-
-            return res.status(500).json({
-                error: atestadoError.message
-            });
-        }
+        if (atestadoError) return res.status(500).json({ error: atestadoError.message });
 
         atestados?.forEach(atestado => {
-
             if (!atestado.data_emissao) return;
 
-            const dataEmissao =
-                new Date(atestado.data_emissao);
+            const dataEmissao = new Date(atestado.data_emissao);
+            const dataFim = new Date(dataEmissao);
+            dataFim.setDate(dataFim.getDate() + Number(atestado.dias_afastamento || 0));
+            
+            const fimDataNormalizada = new Date(dataFim.toISOString().split('T')[0]);
 
-            const dataFim =
-                new Date(dataEmissao);
-
-            dataFim.setDate(
-                dataFim.getDate() +
-                Number(atestado.dias_afastamento || 0)
-            );
-
-            // apenas afastamentos ativos
-            if (dataFim >= hoje) {
-
-                const diasRestantes = Math.ceil(
-                    (dataFim - hoje) /
-                    (1000 * 60 * 60 * 24)
-                );
+            // Se o atestado ainda está vigente
+            if (fimDataNormalizada >= hojeDataNormalizada) {
+                const diasRestantes = Math.ceil((fimDataNormalizada - hojeDataNormalizada) / (1000 * 60 * 60 * 24));
+                const nomeFunc = atestado.usuarios?.nome || 'Funcionário';
 
                 avisos.push({
                     tipo: 'afastamento',
-                    prioridade: 'alta',
+                    prioridade: 'alta', // Atestado sempre é tratado como prioridade alta para cobertura
                     usuario_id: atestado.usuario_id,
-                    nome:
-                        atestado.usuarios?.nome ||
-                        'Funcionário',
-                    cargo:
-                        atestado.usuarios?.cargo || '-',
-                    mensagem:
-                        `${atestado.usuarios?.nome} está afastado(a) por ${atestado.dias_afastamento} dia(s). Retorno previsto em ${diasRestantes} dia(s).`,
+                    nome: nomeFunc,
+                    cargo: atestado.usuarios?.cargo || '-',
+                    mensagem: `${nomeFunc} está em licença médica por ${atestado.dias_afastamento} dia(s). Retorno previsto em ${diasRestantes} dia(s).`,
                     dias_restantes: diasRestantes,
-                    data_fim:
-                        dataFim
-                            .toISOString()
-                            .split('T')[0]
+                    data_fim: dataFim.toISOString().split('T')[0]
                 });
             }
         });
 
-        // =========================
-        // ORDENAÇÃO
-        // =========================
-
-        const ordemPrioridade = {
-            critica: 0,
-            alta: 1,
-            media: 2
-        };
-
+        // Ordenação unificada por prioridade
+        const ordemPrioridade = { critica: 0, alta: 1, media: 2, baixa: 3 };
         avisos.sort((a, b) => {
-
-            const prioridadeA =
-                ordemPrioridade[a.prioridade] ?? 99;
-
-            const prioridadeB =
-                ordemPrioridade[b.prioridade] ?? 99;
-
-            if (prioridadeA !== prioridadeB) {
-
-                return prioridadeA - prioridadeB;
-            }
-
-            return (
-                (b.meses_pendente || 0) -
-                (a.meses_pendente || 0)
-            );
+            const pa = ordemPrioridade[a.prioridade] ?? 99;
+            const pb = ordemPrioridade[b.prioridade] ?? 99;
+            if (pa !== pb) return pa - pb;
+            return (b.meses_referencia || 0) - (a.meses_referencia || 0);
         });
 
         return res.json(avisos);
-
     } catch (err) {
-
-        return res.status(500).json({
-            error: 'Erro interno.',
-            detalhe: err.message
-        });
+        return res.status(500).json({ error: 'Erro interno.', detalhe: err.message });
     }
 };
 
+// =========================================
+// MURAL DO FUNCIONÁRIO
+// =========================================
 exports.listarAvisosFuncionario = async (req, res) => {
-
     const usuario_id = req.user.id;
     const tenant_id = req.user.tenant_id;
 
     try {
-
         const avisos = [];
         const hoje = new Date();
+        const hojeDataStr = hoje.toISOString().split('T')[0];
+        const hojeDataNormalizada = new Date(hojeDataStr);
 
-        // =========================
-        // FÉRIAS
-        // =========================
-
-        const { data: ferias, error: feriasError } = await supabase
+        // 1. FÉRIAS DO FUNCIONÁRIO
+        const { data: pendentes, error: feriasError } = await supabase
             .from('ferias')
             .select('*')
             .eq('usuario_id', usuario_id)
             .eq('tenant_id', tenant_id)
-            .eq('status_ferias', 'pendente')
-            .order('data_ferias_prevista', {
-                ascending: true
+            .eq('status_ferias', 'pendente');
+
+        if (feriasError) return res.status(500).json({ error: feriasError.message });
+
+        if (pendentes && pendentes.length > 0) {
+            const pendenteMaisAntiga = pendentes.reduce((maisAntiga, atual) => {
+                return new Date(atual.data_ferias_prevista) < new Date(maisAntiga.data_ferias_prevista)
+                    ? atual
+                    : maisAntiga;
             });
 
-        if (feriasError) {
+            const calc = calcularSituacaoFerias(pendenteMaisAntiga);
 
-            return res.status(500).json({
-                error: feriasError.message
-            });
-        }
-
-        // pega somente a pendente MAIS ANTIGA
-        const feriasMaisAntiga = ferias?.[0];
-
-        if (feriasMaisAntiga?.data_ferias_prevista) {
-
-            const dataPrevista =
-                new Date(
-                    feriasMaisAntiga.data_ferias_prevista
-                );
-
-            let mesesPendente =
-                (hoje.getFullYear() - dataPrevista.getFullYear()) * 12;
-
-            mesesPendente +=
-                hoje.getMonth() - dataPrevista.getMonth();
-
-            let mensagem = null;
-            let prioridade = null;
-            let status = null;
-
-            if (mesesPendente >= 20) {
-
-                mensagem =
-                    'Você possui férias a vencer. Caso não marque nos próximos 30 dias, será realizada marcação de férias compulsórias.';
-
-                prioridade = 'critica';
-
-                status = 'Férias a vencer';
-
-            } else if (mesesPendente >= 16) {
-
-                mensagem =
-                    'Você tem férias pendentes de agendamento com prazo curto. Favor agendar suas férias.';
-
-                prioridade = 'alta';
-
-                status = 'Prazo curto';
-
-            } else if (mesesPendente >= 12) {
-
-                mensagem =
-                    'Você possui férias disponíveis para agendar.';
-
-                prioridade = 'media';
-
-                status = 'Disponível';
-            }
-
-            if (mensagem) {
-
+            if (calc && calc.aviso_funcionario) {
                 avisos.push({
                     tipo: 'férias',
-                    prioridade,
-                    status,
-                    mensagem,
-                    meses_pendente: mesesPendente,
-                    data_prevista:
-                        feriasMaisAntiga.data_ferias_prevista,
-                    dias_restantes: 0
+                    prioridade: calc.prioridade,
+                    status: calc.situacao,
+                    mensagem: calc.aviso_funcionario, // Usa o texto amigável focado no funcionário
+                    meses_referencia: calc.meses_referencia,
+                    data_vencimento: calc.data_vencimento
                 });
             }
         }
 
-        // =========================
-        // AFASTAMENTOS
-        // =========================
-
+        // 2. ATESTADOS DO FUNCIONÁRIO
         const { data: atestados, error: atestadoError } = await supabase
             .from('atestados')
             .select('*')
             .eq('tenant_id', tenant_id)
-            .eq('usuario_id', usuario_id);
+            .eq('usuario_id', usuario_id)
+            .eq('status', 'aprovado');
 
-        if (atestadoError) {
-
-            return res.status(500).json({
-                error: atestadoError.message
-            });
-        }
+        if (atestadoError) return res.status(500).json({ error: atestadoError.message });
 
         atestados?.forEach(atestado => {
-
             if (!atestado.data_emissao) return;
 
-            const dataEmissao =
-                new Date(atestado.data_emissao);
+            const dataEmissao = new Date(atestado.data_emissao);
+            const dataFim = new Date(dataEmissao);
+            dataFim.setDate(dataFim.getDate() + Number(atestado.dias_afastamento || 0));
+            
+            const fimDataNormalizada = new Date(dataFim.toISOString().split('T')[0]);
 
-            const dataFim =
-                new Date(dataEmissao);
-
-            dataFim.setDate(
-                dataFim.getDate() +
-                Number(atestado.dias_afastamento || 0)
-            );
-
-            if (dataFim >= hoje) {
-
-                const diasRestantes = Math.ceil(
-                    (dataFim - hoje) /
-                    (1000 * 60 * 60 * 24)
-                );
+            if (fimDataNormalizada >= hojeDataNormalizada) {
+                const diasRestantes = Math.ceil((fimDataNormalizada - hojeDataNormalizada) / (1000 * 60 * 60 * 24));
 
                 avisos.push({
                     tipo: 'afastamento',
-                    prioridade: 'alta',
-                    mensagem:
-                        `Você está afastado(a). Retorno previsto em ${diasRestantes} dia(s).`,
+                    prioridade: 'critica', // Ocultamos do dashboard principal colocando peso máximo se ele tentar acessar
+                    mensagem: `Opa! Consta que você está de atestado médico. Seu foco agora deve ser a sua recuperação! Retorno previsto em ${diasRestantes} dia(s).`,
                     dias_restantes: diasRestantes,
-                    data_fim:
-                        dataFim
-                            .toISOString()
-                            .split('T')[0]
+                    data_fim: dataFim.toISOString().split('T')[0]
                 });
             }
         });
 
-        // =========================
-        // ORDENAÇÃO
-        // =========================
-
-        const ordemPrioridade = {
-            critica: 0,
-            alta: 1,
-            media: 2
-        };
-
+        const ordemPrioridade = { critica: 0, alta: 1, media: 2, baixa: 3 };
         avisos.sort((a, b) => {
-
-            const prioridadeA =
-                ordemPrioridade[a.prioridade] ?? 99;
-
-            const prioridadeB =
-                ordemPrioridade[b.prioridade] ?? 99;
-
-            if (prioridadeA !== prioridadeB) {
-
-                return prioridadeA - prioridadeB;
-            }
-
-            return (
-                (b.meses_pendente || 0) -
-                (a.meses_pendente || 0)
-            );
+            const pa = ordemPrioridade[a.prioridade] ?? 99;
+            const pb = ordemPrioridade[b.prioridade] ?? 99;
+            if (pa !== pb) return pa - pb;
+            return (b.meses_referencia || 0) - (a.meses_referencia || 0);
         });
 
         return res.json(avisos);
-
     } catch (err) {
-
-        return res.status(500).json({
-            error: 'Erro interno.',
-            detalhe: err.message
-        });
+        return res.status(500).json({ error: 'Erro interno.', detalhe: err.message });
     }
 };

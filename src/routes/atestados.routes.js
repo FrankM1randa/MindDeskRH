@@ -6,8 +6,10 @@ const { listarAtestados, uploadAtestado, deletarAtestado } = require('../control
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-router.get('/', authMiddleware, adminMiddleware, listarAtestados);
+router.get('/', authMiddleware, listarAtestados);
 router.post('/upload', authMiddleware, upload.single('arquivo'), uploadAtestado);
 router.delete('/:id', authMiddleware, adminMiddleware, deletarAtestado);
+router.get('/pendentes', atestadosController.listarPendentes);
+router.patch('/:id/status', atestadosController.atualizarStatus);
 
 module.exports = router;

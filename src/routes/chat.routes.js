@@ -1,23 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const aiService = require('../services/ai_service');
+// 1. Importe o middleware de autenticação
+const { authMiddleware } = require('../middlewares/auth.middleware');
 
-router.post('/perguntar', async (req, res) => {
-    // O front-end antigo só manda query e tenant_id
-    const { query, tenant_id } = req.body;
+// 2. Proteja a rota com o middleware
+router.post('/perguntar', authMiddleware, async (req, res) => {
+    const { query } = req.body;
 
     if (!query) {
         return res.status(400).json({ erro: "A pergunta é obrigatória." });
     }
 
     try {
-        // Passamos os dados da tela + dados mockados para o teste rodar
+        // 3. Pega os dados REAIS do token JWT (req.user)
         const resultado = await aiService.askAI({ 
-            query, 
-            tenant_id,
-            user_id: "teste-123",        // Simula o ID do Supabase
-            role: "gerente",             // Simula que é gerente (para não ser bloqueado)
-            current_agent: "main"        // Diz que está no menu principal
+            query: query, 
+            tenant_id: Number(req.user.tenant_id), // Converte para inteiro (exigência do Python)
+            usuario_id: String(req.user.id).trim(), // Envia o ID real do Supabase
+            role: req.user.role || "viewer",        // Envia a role real (ex: admin, viewer)
+            current_agent: "main"                   // Mantém o agente principal
         });
         
         res.json(resultado);
