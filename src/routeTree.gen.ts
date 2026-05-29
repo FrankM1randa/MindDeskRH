@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as HumanogramaRouteImport } from './routes/humanograma'
 import { Route as FuncionariosRouteImport } from './routes/funcionarios'
 import { Route as DocumentosRouteImport } from './routes/documentos'
+import { Route as CursosRouteImport } from './routes/cursos'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
@@ -55,6 +56,11 @@ const DocumentosRoute = DocumentosRouteImport.update({
   path: '/documentos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CursosRoute = CursosRouteImport.update({
+  id: '/cursos',
+  path: '/cursos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/cursos': typeof CursosRoute
   '/documentos': typeof DocumentosRoute
   '/funcionarios': typeof FuncionariosRoute
   '/humanograma': typeof HumanogramaRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/cursos': typeof CursosRoute
   '/documentos': typeof DocumentosRoute
   '/funcionarios': typeof FuncionariosRoute
   '/humanograma': typeof HumanogramaRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/chat': typeof ChatRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/cursos': typeof CursosRoute
   '/documentos': typeof DocumentosRoute
   '/funcionarios': typeof FuncionariosRoute
   '/humanograma': typeof HumanogramaRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/configuracoes'
+    | '/cursos'
     | '/documentos'
     | '/funcionarios'
     | '/humanograma'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/configuracoes'
+    | '/cursos'
     | '/documentos'
     | '/funcionarios'
     | '/humanograma'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/chat'
     | '/configuracoes'
+    | '/cursos'
     | '/documentos'
     | '/funcionarios'
     | '/humanograma'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRoute: typeof ChatRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  CursosRoute: typeof CursosRoute
   DocumentosRoute: typeof DocumentosRoute
   FuncionariosRoute: typeof FuncionariosRoute
   HumanogramaRoute: typeof HumanogramaRoute
@@ -211,6 +224,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocumentosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/cursos': {
+      id: '/cursos'
+      path: '/cursos'
+      fullPath: '/cursos'
+      preLoaderRoute: typeof CursosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/configuracoes': {
       id: '/configuracoes'
       path: '/configuracoes'
@@ -239,6 +259,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  CursosRoute: CursosRoute,
   DocumentosRoute: DocumentosRoute,
   FuncionariosRoute: FuncionariosRoute,
   HumanogramaRoute: HumanogramaRoute,

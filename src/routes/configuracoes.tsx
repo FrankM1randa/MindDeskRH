@@ -71,6 +71,7 @@ function ConfiguracoesPage() {
       ""
     );
 
+    role === "admin" ? "Gerente" : "Funcionário";
     setRole(p?.role || "user");
   }, [navigate]);
 
@@ -78,8 +79,7 @@ function ConfiguracoesPage() {
     setDarkMode(val);
     document.documentElement.classList.toggle("dark", val);
   };
-
-  const handleAlterarSenha = async () => {
+const handleAlterarSenha = async () => {
     setAlert({ msg: "", type: "error" });
 
     if (
@@ -124,13 +124,14 @@ function ConfiguracoesPage() {
 
       if (!res.ok) {
         return setAlert({
-          msg: data.error || "Erro ao alterar senha.",
+          // Garante que vai ler a propriedade 'error' retornada pelo backend
+          msg: data.error || data.mensagem || "Erro ao alterar senha.",
           type: "error",
         });
       }
 
       setAlert({
-        msg: "Senha alterada com sucesso!",
+        msg: "Senha alteredada com sucesso!",
         type: "success",
       });
 
