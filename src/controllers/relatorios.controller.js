@@ -229,102 +229,59 @@ exports.relatorioAtrasos = async (req, res) => {
 // RELATÓRIO BANCO DE HORAS
 // =========================================
 exports.relatorioBancoHoras = async (req, res) => {
-    const { tenant_id, data_inicio, data_fim } = req.query;
+    const { tenant_id } = req.query;
 
-    if (!tenant_id || !data_inicio || !data_fim) {
-        return res.status(400).json({
-            error: 'tenant_id, data_inicio e data_fim são obrigatórios.'
-        });
+    if (!tenant_id) {
+        return res.status(400).json({ error: 'tenant_id é obrigatório.' });
     }
 
     try {
         const gerente_id = req.user.id;
 
+        // 1. Busca os usuários do gerente
         const { data: usuarios, error: usuariosError } = await supabase
             .from('usuarios')
             .select('id, nome, email, cargo')
             .eq('tenant_id', tenant_id)
             .eq('gerente_id', gerente_id);
 
-        if (usuariosError) {
-            return res.status(500).json({ error: usuariosError.message });
-        }
+        if (usuariosError) return res.status(500).json({ error: usuariosError.message });
 
         const usuariosIds = usuarios.map(u => u.id);
 
-        const { data: pontos, error: pontosError } = await supabase
-            .from('pontos')
-            .select('usuario_id, horario, tipo')
+        // 2. Busca direto da nova tabela banco_horas
+        const { data: bancoHoras, error: bancoError } = await supabase
+            .from('banco_horas')  // <-- nova tabela
+            .select('usuario_id, saldo_minutos, updated_at')
             .eq('tenant_id', tenant_id)
-            .in('usuario_id', usuariosIds)
-            .gte('horario', `${data_inicio}T00:00:00`)
-            .lte('horario', `${data_fim}T23:59:59`)
-            .order('horario', { ascending: true });
+            .in('usuario_id', usuariosIds);
 
-        if (pontosError) {
-            return res.status(500).json({ error: pontosError.message });
-        }
+        if (bancoError) return res.status(500).json({ error: bancoError.message });
 
-        const JORNADA_MINUTOS = 8 * 60;
-        const porUsuarioDia = {};
+        // 3. Monta o relatório juntando com os dados do usuário
+        const relatorio = bancoHoras.map(banco => {
+            const usuario = usuarios.find(u => u.id === banco.usuario_id);
+            const saldo = banco.saldo_minutos;
 
-        pontos?.forEach(ponto => {
-            const dia = ponto.horario.split('T')[0];
-            const chave = `${ponto.usuario_id}_${dia}`;
-
-            if (!porUsuarioDia[chave]) {
-                porUsuarioDia[chave] = {
-                    usuario_id: ponto.usuario_id,
-                    dia,
-                    pontos: []
-                };
-            }
-            porUsuarioDia[chave].pontos.push(ponto);
-        });
-
-        const relatorio = [];
-
-        Object.values(porUsuarioDia).forEach(({ usuario_id, dia, pontos }) => {
-            const get = tipo => pontos.find(p => p.tipo === tipo);
-
-            const entrada = get('entrada');
-            const almoco = get('almoco');
-            const retorno = get('retorno_almoco');
-            const saida = get('saida');
-
-            if (!entrada || !saida) return;
-
-            const toMin = iso => {
-                const d = new Date(iso);
-                return d.getHours() * 60 + d.getMinutes();
-            };
-
-            let trabalhado = toMin(saida.horario) - toMin(entrada.horario);
-
-            if (almoco && retorno) {
-                const pausaAlmoco = toMin(retorno.horario) - toMin(almoco.horario);
-                trabalhado -= pausaAlmoco;
-            }
-
-            const saldo = trabalhado - JORNADA_MINUTOS;
-            const usuario = usuarios.find(u => u.id === usuario_id);
-
-            relatorio.push({
-                usuario_id,
+            return {
+                usuario_id: banco.usuario_id,
                 nome: usuario?.nome,
+                email: usuario?.email,
                 cargo: usuario?.cargo,
-                dia,
-                minutos_trabalhados: trabalhado,
-                horas_trabalhadas: `${Math.floor(trabalhado / 60)}h${String(trabalhado % 60).padStart(2, '0')}m`,
                 saldo_minutos: saldo,
-                saldo:
-                    saldo >= 0
-                        ? `+${Math.floor(saldo / 60)}h${String(saldo % 60).padStart(2, '0')}m`
-                        : `-${Math.floor(Math.abs(saldo) / 60)}h${String(Math.abs(saldo) % 60).padStart(2, '0')}m`
-            });
+                saldo: saldo >= 0
+                    ? `+${Math.floor(saldo / 60)}h${String(saldo % 60).padStart(2, '0')}m`
+                    : `-${Math.floor(Math.abs(saldo) / 60)}h${String(Math.abs(saldo) % 60).padStart(2, '0')}m`,
+                status: saldo >= 0 ? 'positivo' : 'negativo',
+                atualizado_em: banco.updated_at
+            };
         });
+
+        // 4. Ordena: negativos primeiro (mais críticos)
+        relatorio.sort((a, b) => a.saldo_minutos - b.saldo_minutos);
 
         return res.json(relatorio);
+
     } catch (err) {
         return res.status(500).json({ error: 'Erro interno.', detalhe: err.message });
     }

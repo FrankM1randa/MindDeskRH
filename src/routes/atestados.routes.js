@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const { authMiddleware, adminMiddleware } = require('../middlewares/auth.middleware');
 const { listarAtestados, uploadAtestado, deletarAtestado } = require('../controllers/atestados.controller');
+const atestadosController = require('../controllers/atestados.controller');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
