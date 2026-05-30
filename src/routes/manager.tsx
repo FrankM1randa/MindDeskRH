@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+
 import {
   PageShell,
   Card,
@@ -10,6 +11,18 @@ import {
   authHeaders,
 } from "@/components/minddesk";
 
+import {
+  MessageCircle,
+  QrCode,
+  BarChart3,
+  Users,
+  GraduationCap,
+  FileText,
+  Settings,
+  BrainCircuit,
+  ArrowRight,
+} from "lucide-react";
+
 import homeIllus from "@/assets/illus-home.png";
 
 export const Route = createFileRoute("/manager")({
@@ -17,7 +30,7 @@ export const Route = createFileRoute("/manager")({
 });
 
 type MenuItem = {
-  icon: string;
+  icon: React.ReactNode;
   title: string | ((isAdmin: boolean) => string);
   desc: string | ((isAdmin: boolean) => string);
   to:
@@ -30,7 +43,7 @@ type MenuItem = {
     | "/humanograma"
     | "/configuracoes";
   admin?: boolean;
-  hideForAdmin?: boolean; 
+  hideForAdmin?: boolean;
 };
 
 type Aviso = {
@@ -54,95 +67,93 @@ type Payload = {
   };
 };
 
-// ─── MENU CORRIGIDO E SEM DUPLICADOS ─────────────────────────────────────────
+// =========================================
+// MENU
+// =========================================
 const MENU: MenuItem[] = [
   {
-    icon: "💬",
+    icon: <MessageCircle size={22} strokeWidth={1.8} />,
     title: "Chat RH",
     desc: "Converse com o assistente virtual",
     to: "/chat",
   },
   {
-    icon: "📱",
+    icon: <QrCode size={22} strokeWidth={1.8} />,
     title: "Gerar QR Code",
-    desc: "Gere QR codes para o acesso rápido",
+    desc: "Acesso rápido para colaboradores",
     to: "/qrcode",
   },
   {
-    icon: "📊",
+    icon: <BarChart3 size={22} strokeWidth={1.8} />,
     title: "Relatórios",
-    desc: "Faltas, atrasos, férias e mais",
+    desc: "Faltas, atrasos e desempenho",
     to: "/relatorios",
     admin: true,
   },
   {
-    icon: "🧬",
+    icon: <BrainCircuit size={22} strokeWidth={1.8} />,
     title: "Humanograma",
     desc: "Indicadores e análise de pessoas",
     to: "/humanograma",
     admin: true,
   },
   {
-    icon: "👥",
+    icon: <Users size={22} strokeWidth={1.8} />,
     title: "Funcionários",
     desc: "Gerenciar colaboradores",
     to: "/funcionarios",
     admin: true,
   },
   {
-    icon: "🎓",
+    icon: <GraduationCap size={22} strokeWidth={1.8} />,
     title: "Meus Cursos",
-    desc: "Treinamentos obrigatórios e links",
+    desc: "Treinamentos e capacitações",
     to: "/cursos",
-    hideForAdmin: true, // Apenas funcionários comuns visualizam esse botão
+    hideForAdmin: true,
   },
   {
-    icon: "📄",
+    icon: <FileText size={22} strokeWidth={1.8} />,
     title: "Documentos & Cursos",
-    desc: "PDFs, RAG e links de treinamento",
-    to: "/documentos", 
-    admin: true, // Apenas administradores/gerentes acessam essa área global
+    desc: "PDFs, links e treinamentos",
+    to: "/documentos",
+    admin: true,
   },
   {
-    icon: "⚙️",
+    icon: <Settings size={22} strokeWidth={1.8} />,
     title: "Configurações",
-    desc: "Preferências da sua conta",
+    desc: "Preferências da conta",
     to: "/configuracoes",
   },
 ];
 
 // =========================================
-// ESTILOS POR PRIORIDADE
+// ESTILOS DOS AVISOS
 // =========================================
 function getAvisoStyles(prioridade: string) {
   switch (prioridade) {
     case "critica":
       return {
-        card: "bg-red-600/15 border-red-600/30",
-        badge: "text-red-700 bg-red-100",
-        text: "text-red-700",
-        icon: "🚨",
+        card: "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20",
+        badge: "text-red-700 dark:text-red-200 bg-red-100 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20",
+        text: "text-red-700 dark:text-red-200",
       };
     case "alta":
       return {
-        card: "bg-orange-500/10 border-orange-500/20",
-        badge: "text-orange-700 bg-orange-100",
-        text: "text-orange-700",
-        icon: "⚠️",
+        card: "bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20",
+        badge: "text-orange-700 dark:text-orange-200 bg-orange-100 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20",
+        text: "text-orange-700 dark:text-orange-200",
       };
     case "media":
       return {
-        card: "bg-yellow-500/10 border-yellow-500/20",
-        badge: "text-yellow-700 bg-yellow-100",
-        text: "text-yellow-700",
-        icon: "📅",
+        card: "bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20",
+        badge: "text-yellow-700 dark:text-yellow-100 bg-yellow-100 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/20",
+        text: "text-yellow-700 dark:text-yellow-100",
       };
     default:
       return {
-        card: "bg-blue-500/10 border-blue-500/20",
-        badge: "text-blue-700 bg-blue-100",
-        text: "text-blue-700",
-        icon: "ℹ️",
+        card: "bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20",
+        badge: "text-blue-700 dark:text-blue-200 bg-blue-100 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20",
+        text: "text-blue-700 dark:text-blue-200",
       };
   }
 }
@@ -158,46 +169,35 @@ function getPrioridadeLabel(prioridade: string) {
 
 function getTipoLabel(tipo: string) {
   switch (tipo) {
-    case "férias":      return "Férias";
-    case "afastamento": return "Afastamento";
-    default:            return tipo;
+    case "férias":       return "Férias";
+    case "afastamento":  return "Afastamento";
+    default:             return tipo;
   }
 }
 
 // =========================================
-// CARD DE AVISO — GERENTE
+// CARD GERENTE
 // =========================================
 function AvisoCardGerente({ aviso }: { aviso: Aviso }) {
   const styles = getAvisoStyles(aviso.prioridade);
 
   return (
-    <li className={`p-3 rounded-xl border ${styles.card}`}>
+    <li className={`p-4 rounded-2xl border ${styles.card}`}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <span
-          className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full ${styles.badge}`}
-        >
-          {styles.icon} {getTipoLabel(aviso.tipo)} • {getPrioridadeLabel(aviso.prioridade)}
+        <span className={`text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full ${styles.badge}`}>
+          {getTipoLabel(aviso.tipo)} • {getPrioridadeLabel(aviso.prioridade)}
         </span>
-
         {(aviso.dias_restantes ?? 0) > 0 && (
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-[11px] text-zinc-500 dark:text-white/50">
             {aviso.dias_restantes} dia(s)
           </span>
         )}
-
-        {aviso.data_vencimento && aviso.tipo === "férias" && (
-          <span className="text-[10px] text-muted-foreground">
-            Vence {aviso.data_vencimento.split("-").reverse().join("/")}
-          </span>
-        )}
       </div>
-
-      <p className={`text-sm font-medium mt-2 ${styles.text}`}>
+      <p className={`text-sm font-medium mt-3 leading-relaxed ${styles.text}`}>
         {aviso.mensagem}
       </p>
-
       {(aviso.nome || aviso.cargo) && (
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-xs text-zinc-500 dark:text-white/45 mt-2">
           {aviso.nome} • {aviso.cargo}
         </p>
       )}
@@ -206,48 +206,37 @@ function AvisoCardGerente({ aviso }: { aviso: Aviso }) {
 }
 
 // =========================================
-// CARD DE AVISO — FUNCIONÁRIO
+// CARD FUNCIONÁRIO
 // =========================================
 function AvisoCardFuncionario({ aviso }: { aviso: Aviso }) {
   const styles = getAvisoStyles(aviso.prioridade);
 
   return (
-    <li className={`p-4 rounded-xl border ${styles.card}`}>
-      <div className="flex items-start gap-3">
-        <span className="text-xl mt-0.5">{styles.icon}</span>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
-            <span
-              className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${styles.badge}`}
-            >
-              {getTipoLabel(aviso.tipo)} • {getPrioridadeLabel(aviso.prioridade)}
-            </span>
-
-            {(aviso.dias_restantes ?? 0) > 0 && (
-              <span className="text-[10px] text-muted-foreground">
-                {aviso.dias_restantes} dia(s) restante(s)
-              </span>
-            )}
-          </div>
-
-          <p className={`text-sm font-medium leading-snug ${styles.text}`}>
-            {aviso.mensagem}
-          </p>
-
-          {aviso.data_vencimento && aviso.tipo === "férias" && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Vencimento: {aviso.data_vencimento.split("-").reverse().join("/")}
-            </p>
-          )}
-        </div>
+    <li className={`p-4 rounded-2xl border ${styles.card}`}>
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <span className={`text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full ${styles.badge}`}>
+          {getTipoLabel(aviso.tipo)} • {getPrioridadeLabel(aviso.prioridade)}
+        </span>
+        {(aviso.dias_restantes ?? 0) > 0 && (
+          <span className="text-[11px] text-zinc-500 dark:text-white/50">
+            {aviso.dias_restantes} dia(s)
+          </span>
+        )}
       </div>
+      <p className={`text-sm leading-relaxed font-medium ${styles.text}`}>
+        {aviso.mensagem}
+      </p>
+      {aviso.data_vencimento && aviso.tipo === "férias" && (
+        <p className="text-xs text-zinc-500 dark:text-white/45 mt-2">
+          Vencimento: {aviso.data_vencimento.split("-").reverse().join("/")}
+        </p>
+      )}
     </li>
   );
 }
 
 // =========================================
-// PÁGINA PRINCIPAL
+// PAGE
 // =========================================
 function ManagerPage() {
   const navigate = useNavigate();
@@ -279,22 +268,46 @@ function ManagerPage() {
 
   const fetchAvisos = async (admin: boolean) => {
     try {
-      const url = admin
-        ? `${API}/avisos`
-        : `${API}/avisos/meus`;
-
-      const res = await fetch(url, {
-        headers: authHeaders(),
-      });
-
+      // 1. Busca os avisos normais (férias, etc.)
+      const url = admin ? `${API}/avisos` : `${API}/avisos/meus`;
+      const res = await fetch(url, { headers: authHeaders() });
       const data = await res.json();
+      const avisosBase: Aviso[] = res.ok && Array.isArray(data) ? data : [];
 
-      if (!res.ok) {
-        console.error(data);
-        return;
+      // 2. Se for admin, busca também os atestados pendentes para exibir no mural
+      if (admin) {
+        const atestadosRes = await fetch(`${API}/atestados/pendentes`, {
+          headers: authHeaders(),
+        });
+
+        if (atestadosRes.ok) {
+          const atestados = await atestadosRes.json();
+
+          // Converte cada atestado pendente em um aviso no formato do mural
+          const avisosAtestados: Aviso[] = (Array.isArray(atestados) ? atestados : []).map(
+            (a: any) => {
+              const nome = a.usuarios?.nome || a.nome || "Funcionário";
+              const cargo = a.usuarios?.cargo || a.cargo || "";
+              const dias = a.dias_afastamento ?? 0;
+              const motivo = a.motivo_cid || a.motivo || "Atestado médico";
+
+              return {
+                tipo: "afastamento",
+                prioridade: "alta",
+                nome,
+                cargo,
+                mensagem: `${nome} enviou um atestado pendente de aprovação. Motivo: ${motivo}. Afastamento de ${dias} dia(s).`,
+                status: "pendente",
+              };
+            }
+          );
+
+          setAvisos([...avisosAtestados, ...avisosBase]);
+          return;
+        }
       }
 
-      setAvisos(data);
+      setAvisos(avisosBase);
     } catch (err) {
       console.error("Erro ao buscar avisos", err);
     }
@@ -308,27 +321,26 @@ function ManagerPage() {
   const items = useMemo(() => {
     return MENU.filter((item) => {
       if (item.admin && !isAdmin) return false;
-      if (item.hideForAdmin && isAdmin) return false; 
+      if (item.hideForAdmin && isAdmin) return false;
       return true;
     });
   }, [isAdmin]);
 
   return (
     <PageShell>
-      <div className="min-h-screen px-6 lg:px-12 py-10">
-
-        <header className="flex items-center justify-between mb-10">
+      <div className="min-h-screen px-4 sm:px-6 lg:px-12 py-6 sm:py-10 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.10),transparent_35%)]">
+        {/* HEADER */}
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 mb-8 max-w-6xl mx-auto">
           <Logo />
 
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:block text-sm text-muted-foreground">
+          <div className="flex items-center justify-between sm:justify-end gap-3">
+            <span className="text-sm text-zinc-600 dark:text-white/70">
               Olá,{" "}
-              <span className="text-foreground font-semibold capitalize">
+              <span className="text-zinc-900 dark:text-white font-semibold capitalize">
                 {nome}
               </span>
-
               {isAdmin && (
-                <span className="ml-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-accent/15 text-accent rounded-full">
+                <span className="ml-2 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-semibold bg-primary/10 border border-primary/20 text-primary">
                   Gerente
                 </span>
               )}
@@ -336,33 +348,32 @@ function ManagerPage() {
 
             <button
               onClick={handleLogout}
-              className="px-3.5 py-2 text-sm font-medium border border-border rounded-lg hover:bg-secondary hover:text-primary hover:border-primary/40 transition-colors"
+              className="h-11 px-5 rounded-2xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 text-sm font-medium text-zinc-800 dark:text-white shadow-sm hover:shadow-md transition-all"
             >
               Sair
             </button>
           </div>
         </header>
 
-        <div className="grid lg:grid-cols-[1fr_360px] gap-10 max-w-6xl mx-auto">
-
-          {/* LADO ESQUERDO */}
+        {/* GRID */}
+        <div className="grid lg:grid-cols-[1fr_360px] gap-6 lg:gap-10 max-w-6xl mx-auto">
+          {/* ESQUERDA */}
           <div>
-            <Card className="p-8 mb-6">
-              <div className="flex items-start gap-6">
-                <div className="flex-1">
-                  <p className="text-xs uppercase tracking-wider text-primary font-semibold mb-2">
-                    Painel inicial
-                  </p>
+            {/* HERO */}
+            <Card className="relative overflow-hidden border border-black/5 dark:border-white/10 bg-gradient-to-br from-[#111827] via-[#172554] to-[#0f172a] text-white p-6 sm:p-8 mb-6 rounded-[32px] shadow-2xl">
+              <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary/20 blur-3xl rounded-full" />
 
-                  <h1 className="text-3xl font-semibold tracking-tight mb-2">
-                    Bem-vindo de volta,{" "}
-                    <span className="capitalize">{nome}</span>
+              <div className="relative flex items-center justify-between gap-6">
+                <div className="flex-1">
+                  <h1 className="text-3xl sm:text-5xl font-bold tracking-tight mb-4 leading-tight">
+                    Bem-vindo de volta,
+                    <span className="block capitalize mt-1">{nome}</span>
                   </h1>
 
-                  <p className="text-muted-foreground text-sm max-w-md">
+                  <p className="text-zinc-300 text-sm sm:text-base leading-relaxed max-w-lg">
                     {isAdmin
-                      ? "Acesse o assistente de RH, gere QR codes, consulte relatórios e gerencie sua equipe."
-                      : "Acesse o assistente de RH, registre seu ponto e consulte seus cursos e treinamentos."}
+                      ? "Gerencie sua equipe, acompanhe relatórios e acesse recursos do RH de forma rápida."
+                      : "Acompanhe seus treinamentos, avisos e recursos disponíveis no sistema."}
                   </p>
                 </div>
 
@@ -371,34 +382,42 @@ function ManagerPage() {
                   alt=""
                   width={220}
                   height={180}
-                  className="hidden md:block w-44 h-auto -mt-4"
+                  className="hidden md:block w-70 lg:w-75 h-auto object-contain"
                 />
               </div>
             </Card>
 
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 px-1">
-              Menu
-            </h2>
+            {/* TITLE */}
+            <div className="flex items-center justify-between mb-4 px-1">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-white/50">
+                Menu principal
+              </h2>
+            </div>
 
-            <div className="grid sm:grid-cols-2 gap-3">
+            {/* MENU */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
               {items.map((m) => {
                 const resolvedTitle = typeof m.title === "function" ? m.title(isAdmin) : m.title;
                 const resolvedDesc = typeof m.desc === "function" ? m.desc(isAdmin) : m.desc;
 
                 return (
                   <Link key={resolvedTitle} to={m.to}>
-                    <div className="flex items-center gap-3.5 p-4 border-[1.5px] rounded-2xl bg-card transition-all border-border hover:border-primary hover:-translate-y-0.5 hover:shadow-md cursor-pointer">
-                      <div className="w-11 h-11 grid place-items-center rounded-xl bg-secondary text-xl flex-shrink-0">
+                    <div className="group relative overflow-hidden flex items-center gap-4 p-5 min-h-[110px] rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] dark:backdrop-blur-xl shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 cursor-pointer">
+                      <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/10 flex items-center justify-center text-primary flex-shrink-0">
                         {m.icon}
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <div className="text-[15px] font-semibold leading-tight">
+                        <div className="text-[15px] sm:text-base font-semibold text-zinc-900 dark:text-white leading-tight">
                           {resolvedTitle}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
+                        <div className="text-xs sm:text-sm text-zinc-500 dark:text-white/50 mt-1 leading-relaxed">
                           {resolvedDesc}
                         </div>
+                      </div>
+
+                      <div className="text-zinc-400 dark:text-white/40 group-hover:translate-x-1 transition-transform duration-300">
+                        <ArrowRight size={18} />
                       </div>
                     </div>
                   </Link>
@@ -407,31 +426,25 @@ function ManagerPage() {
             </div>
           </div>
 
-          {/* LADO DIREITO — MURAL */}
+          {/* DIREITA */}
           <aside>
-            <Card className="p-6">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            <Card className="p-5 sm:p-6 rounded-[32px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.04] shadow-xl">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-white/50 mb-1">
                 {isAdmin ? "Mural de avisos" : "Meus avisos"}
               </h3>
 
-              {!isAdmin && (
-                <p className="text-xs text-muted-foreground mb-3">
-                  Situação das suas férias e afastamentos
-                </p>
-              )}
-
-              {isAdmin && (
-                <p className="text-xs text-muted-foreground mb-3">
-                  Alertas da sua equipe
-                </p>
-              )}
+              <p className="text-sm text-zinc-500 dark:text-white/45 mb-5 leading-relaxed">
+                {isAdmin
+                  ? "Alertas relacionados à equipe e informações importantes."
+                  : "Situação atual das suas férias e afastamentos."}
+              </p>
 
               <ul className="space-y-3">
                 {avisos.length === 0 && (
-                  <li className="text-sm text-muted-foreground py-6 text-center">
+                  <li className="text-sm text-zinc-500 dark:text-white/45 py-10 text-center">
                     {isAdmin
-                      ? "Nenhum aviso para a equipe."
-                      : "Você não tem avisos pendentes. Tudo em ordem! ✅"}
+                      ? "Nenhum aviso disponível no momento."
+                      : "Você não possui avisos pendentes."}
                   </li>
                 )}
 
@@ -445,7 +458,6 @@ function ManagerPage() {
               </ul>
             </Card>
           </aside>
-
         </div>
       </div>
     </PageShell>

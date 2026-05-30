@@ -3,15 +3,32 @@ import { useEffect, useState, type ReactNode } from "react";
 
 const THEME_KEY = "minddesk_theme";
 
+// ============================================================================
+// HOOK DE TEMA (CORRIGIDO PARA EVITAR O FLASH CLARO NO F5)
+// ============================================================================
 export function useTheme() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  // O segredo está aqui: lemos e aplicamos o tema IMEDIATAMENTE no momento da criação do estado
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(THEME_KEY) as "light" | "dark" | null;
+      const initial = stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      
+      // Aplica a classe diretamente no HTML antes mesmo do primeiro render do React
+      if (initial === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+      
+      return initial;
+    }
+    return "light";
+  });
 
+  // Mantemos o useEffect apenas para sincronizar caso ocorram mudanças externas (opcional)
   useEffect(() => {
-    const stored = (localStorage.getItem(THEME_KEY) as "light" | "dark" | null);
-    const initial = stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
-  }, []);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
 
   const toggle = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -41,7 +58,9 @@ export function ThemeToggle() {
   );
 }
 
-
+// ============================================================================
+// AUTENTICAÇÃO & API
+// ============================================================================
 export const API = "http://localhost:3000";
 export const TENANT_ID = 1;
 export const TOKEN_KEY = "minddesk_token";
@@ -92,7 +111,9 @@ export function authHeaders(): Record<string, string> {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
-
+// ============================================================================
+// COMPONENTES DE INTERFACE
+// ============================================================================
 export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
   const big = size === "lg";
   return (
@@ -111,7 +132,6 @@ export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
   );
 }
 
-/* Decorative geometric shapes layer (flat-illustration vibe) */
 export function ShapesBackdrop() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
@@ -137,6 +157,9 @@ export function ShapesBackdrop() {
 }
 
 export function PageShell({ children }: { children: ReactNode }) {
+  // Executa o hook de tema globalmente aqui para garantir a classe nas páginas que usam o Shell
+  useTheme();
+
   return (
     <div className="md-bg relative">
       <ShapesBackdrop />

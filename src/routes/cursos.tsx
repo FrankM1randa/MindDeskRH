@@ -1,6 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { API, authHeaders, useRequireAuth, PageShell, Card, BackButton, Logo, Alert } from "@/components/minddesk";
+import {
+  API,
+  authHeaders,
+  useRequireAuth,
+  PageShell,
+  Card,
+  BackButton,
+  Logo,
+  Alert,
+} from "@/components/minddesk";
 import docsIllus from "@/assets/illus-docs.png";
 
 export const Route = createFileRoute("/cursos")({
@@ -18,9 +27,18 @@ type Curso = {
 
 function CursosPage() {
   useRequireAuth();
+
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [loading, setLoading] = useState(true);
-  const [alert, setAlert] = useState<{ msg: string; type: "error" | "success" }>({ msg: "", type: "error" });
+
+  const [alert, setAlert] = useState<{
+    msg: string;
+    type: "error" | "success";
+  }>({
+    msg: "",
+    type: "error",
+  });
+
   const [aba, setAba] = useState<"pendentes" | "concluidos">("pendentes");
 
   useEffect(() => {
@@ -29,18 +47,40 @@ function CursosPage() {
 
   const fetchCursos = async () => {
     setLoading(true);
+
     try {
-      const res = await fetch(`${API}/cursos`, { headers: authHeaders() });
+      const res = await fetch(`${API}/cursos`, {
+        headers: authHeaders(),
+      });
+
       if (!res.ok) throw new Error();
+
       const data = await res.json();
       setCursos(data || []);
     } catch {
-      // Fallback de exemplo caso o backend ainda não tenha o endpoint
       setCursos([
-        { id: 1, titulo: "Compliance e Ética", descricao: "Princípios de conduta corporativa.", cargaHoraria: 4, concluido: false },
-        { id: 2, titulo: "Segurança no Trabalho", descricao: "NRs essenciais e prevenção de acidentes.", cargaHoraria: 6, concluido: false },
-        { id: 3, titulo: "LGPD para Colaboradores", descricao: "Boas práticas com dados pessoais.", cargaHoraria: 3, concluido: true, concluidoEm: new Date().toISOString() },
-        { id: 4, titulo: "Comunicação Não-Violenta", descricao: "Técnicas para um ambiente saudável.", cargaHoraria: 2, concluido: true, concluidoEm: new Date().toISOString() },
+        {
+          id: 1,
+          titulo: "Compliance e Ética",
+          descricao: "Princípios de conduta corporativa.",
+          cargaHoraria: 4,
+          concluido: false,
+        },
+        {
+          id: 2,
+          titulo: "Segurança no Trabalho",
+          descricao: "NRs essenciais e prevenção de acidentes.",
+          cargaHoraria: 6,
+          concluido: false,
+        },
+        {
+          id: 3,
+          titulo: "LGPD para Colaboradores",
+          descricao: "Boas práticas com dados pessoais.",
+          cargaHoraria: 3,
+          concluido: true,
+          concluidoEm: new Date().toISOString(),
+        },
       ]);
     } finally {
       setLoading(false);
@@ -49,154 +89,262 @@ function CursosPage() {
 
   const concluirCurso = async (curso: Curso) => {
     setAlert({ msg: "", type: "success" });
+
     try {
-      const res = await fetch(`${API}/cursos/${curso.id}/concluir`, {
+      await fetch(`${API}/cursos/${curso.id}/concluir`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
       });
-      if (!res.ok) throw new Error();
-    } catch {
-      // segue otimista mesmo sem backend
-    }
+    } catch {}
+
     setCursos((prev) =>
-      prev.map((c) => (c.id === curso.id ? { ...c, concluido: true, concluidoEm: new Date().toISOString() } : c)),
+      prev.map((c) =>
+        c.id === curso.id
+          ? {
+              ...c,
+              concluido: true,
+              concluidoEm: new Date().toISOString(),
+            }
+          : c
+      )
     );
-    setAlert({ msg: `Curso "${curso.titulo}" concluído!`, type: "success" });
+
+    setAlert({
+      msg: `Curso "${curso.titulo}" concluído!`,
+      type: "success",
+    });
   };
 
-  // =========================================
-  // NOVA FUNÇÃO: DESMARCAR CURSO CONCLUÍDO
-  // =========================================
   const desmarcarCurso = async (curso: Curso) => {
     setAlert({ msg: "", type: "success" });
+
     try {
-      // Exemplo de rota de DELETE ou POST para reverter o status no backend
-      const res = await fetch(`${API}/cursos/${curso.id}/desmarcar`, {
+      await fetch(`${API}/cursos/${curso.id}/desmarcar`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
       });
-      if (!res.ok) throw new Error();
-    } catch {
-      // segue otimista
-    }
+    } catch {}
+
     setCursos((prev) =>
-      prev.map((c) => (c.id === curso.id ? { ...c, concluido: false, concluidoEm: undefined } : c)),
+      prev.map((c) =>
+        c.id === curso.id
+          ? {
+              ...c,
+              concluido: false,
+              concluidoEm: undefined,
+            }
+          : c
+      )
     );
-    setAlert({ msg: `Curso "${curso.titulo}" movido para pendentes.`, type: "success" });
+
+    setAlert({
+      msg: `Curso "${curso.titulo}" movido para pendentes.`,
+      type: "success",
+    });
   };
 
   const pendentes = cursos.filter((c) => !c.concluido);
   const concluidos = cursos.filter((c) => c.concluido);
+
   const lista = aba === "pendentes" ? pendentes : concluidos;
-  const progresso = cursos.length ? Math.round((concluidos.length / cursos.length) * 100) : 0;
+
+  const progresso = cursos.length
+    ? Math.round((concluidos.length / cursos.length) * 100)
+    : 0;
 
   return (
     <PageShell>
-      <div className="min-h-screen px-6 lg:px-10 py-10">
-        <div className="flex items-center justify-between mb-8 max-w-5xl mx-auto">
+      <div className="min-h-screen px-4 sm:px-6 lg:px-10 py-5 sm:py-8">
+        <div className="flex items-center justify-between max-w-5xl mx-auto mb-6">
           <Logo />
           <BackButton />
         </div>
 
         <div className="max-w-5xl mx-auto">
-          <Card className="p-8">
-            <div className="flex flex-wrap items-center gap-4 mb-6">
-              <img src={docsIllus} alt="" width={110} height={75} loading="lazy" className="h-16 w-auto" />
-              <div className="flex-1 min-w-[200px]">
-                <h1 className="text-2xl font-semibold tracking-tight">Meus Cursos</h1>
-                <p className="text-sm text-muted-foreground">Acompanhe seus treinamentos e marque como concluído.</p>
+          <Card className="p-4 sm:p-7 rounded-3xl border border-border/60 shadow-sm">
+            {/* HEADER */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-5 mb-7">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-primary/10 border border-primary/15 flex items-center justify-center overflow-hidden shrink-0">
+                  <img
+                    src={docsIllus}
+                    alt=""
+                    loading="lazy"
+                    className="w-9 sm:w-11 opacity-90"
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                    Meus Cursos
+                  </h1>
+
+                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                    Acompanhe seus treinamentos e progresso.
+                  </p>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-3xl font-semibold text-primary">{progresso}%</div>
-                <div className="text-xs text-muted-foreground">{concluidos.length}/{cursos.length} concluídos</div>
+
+              {/* progresso */}
+              <div className="w-full sm:w-[210px] rounded-2xl border border-border bg-secondary/40 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Progresso
+                  </span>
+
+                  <span className="text-lg font-bold text-primary">
+                    {progresso}%
+                  </span>
+                </div>
+
+                <div className="w-full h-2 rounded-full bg-background overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-300"
+                    style={{ width: `${progresso}%` }}
+                  />
+                </div>
+
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  {concluidos.length} de {cursos.length} concluídos
+                </p>
               </div>
             </div>
 
-            {/* progress bar */}
-            <div className="w-full h-2 rounded-full bg-secondary overflow-hidden mb-6">
-              <div className="h-full bg-primary transition-all" style={{ width: `${progresso}%` }} />
-            </div>
-
+            {/* ALERT */}
             {alert.msg && (
-              <div className="mb-4">
+              <div className="mb-5">
                 <Alert type={alert.type} msg={alert.msg} />
               </div>
             )}
 
-            {/* Tabs */}
-            <div className="inline-flex p-1 rounded-xl bg-secondary mb-5">
+            {/* TABS */}
+            <div className="flex bg-secondary/60 border border-border rounded-2xl p-1 mb-6 overflow-hidden">
               <button
                 onClick={() => setAba("pendentes")}
-                className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition-all ${
-                  aba === "pendentes" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                className={`flex-1 h-11 rounded-xl text-sm font-semibold transition-all ${
+                  aba === "pendentes"
+                    ? "bg-card shadow-sm text-primary"
+                    : "text-muted-foreground"
                 }`}
               >
                 Pendentes ({pendentes.length})
               </button>
+
               <button
                 onClick={() => setAba("concluidos")}
-                className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition-all ${
-                  aba === "concluidos" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                className={`flex-1 h-11 rounded-xl text-sm font-semibold transition-all ${
+                  aba === "concluidos"
+                    ? "bg-card shadow-sm text-primary"
+                    : "text-muted-foreground"
                 }`}
               >
                 Concluídos ({concluidos.length})
               </button>
             </div>
 
-            {/* Lista */}
+            {/* LISTA */}
             {loading ? (
-              <p className="text-center py-10 text-muted-foreground text-sm">Carregando cursos...</p>
+              <div className="py-16 text-center">
+                <div className="w-10 h-10 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />
+
+                <p className="text-sm text-muted-foreground">
+                  Carregando cursos...
+                </p>
+              </div>
             ) : lista.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground text-sm">
-                {aba === "pendentes" ? "🎉 Você não tem cursos pendentes!" : "Nenhum curso concluído ainda."}
+              <div className="py-16 text-center border border-dashed border-border rounded-3xl bg-secondary/20">
+                <div className="w-14 h-14 rounded-2xl bg-secondary mx-auto mb-4" />
+
+                <h3 className="text-sm font-semibold mb-1">
+                  Nenhum curso encontrado
+                </h3>
+
+                <p className="text-xs text-muted-foreground">
+                  {aba === "pendentes"
+                    ? "Você não possui cursos pendentes."
+                    : "Você ainda não concluiu nenhum curso."}
+                </p>
               </div>
             ) : (
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 {lista.map((c) => (
                   <div
                     key={c.id}
-                    className="p-5 rounded-2xl border-[1.5px] border-border bg-card hover:border-primary/40 transition-colors flex flex-col"
+                    className="group rounded-3xl border border-border bg-card p-5 transition-all hover:border-primary/20 hover:shadow-md"
                   >
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-secondary grid place-items-center text-lg flex-shrink-0">
-                        {c.concluido ? "✅" : "📘"}
+                    {/* topo */}
+                    <div className="flex items-start gap-3 mb-4">
+                      <div
+                        className={`w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center border ${
+                          c.concluido
+                            ? "bg-emerald-500/10 border-emerald-500/20"
+                            : "bg-primary/10 border-primary/15"
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded-full ${
+                            c.concluido
+                              ? "bg-emerald-500"
+                              : "bg-primary"
+                          }`}
+                        />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-[15px] font-semibold leading-tight">{c.titulo}</h3>
+
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-[15px] sm:text-base font-semibold leading-tight text-foreground">
+                          {c.titulo}
+                        </h3>
+
                         {c.descricao && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{c.descricao}</p>
+                          <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed line-clamp-2">
+                            {c.descricao}
+                          </p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs text-muted-foreground mb-4">
-                      {c.cargaHoraria && <span>⏱ {c.cargaHoraria}h</span>}
+                    {/* infos */}
+                    <div className="flex items-center justify-between gap-3 mb-5">
+                      {c.cargaHoraria ? (
+                        <div className="px-3 py-1.5 rounded-full bg-secondary text-[11px] font-medium text-muted-foreground">
+                          {c.cargaHoraria}h de conteúdo
+                        </div>
+                      ) : (
+                        <div />
+                      )}
+
                       {c.concluido && c.concluidoEm && (
-                        <span className="text-emerald-600 font-medium">
-                          Concluído em {new Date(c.concluidoEm).toLocaleDateString("pt-BR")}
+                        <span className="text-[11px] text-emerald-600 font-medium">
+                          {new Date(c.concluidoEm).toLocaleDateString("pt-BR")}
                         </span>
                       )}
                     </div>
 
+                    {/* ação */}
                     <div className="mt-auto">
                       {c.concluido ? (
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Finalizado
-                          </span>
-                          
-                          {/* BOTÃO DESMARCAR */}
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-xs font-semibold">
+                            Concluído
+                          </div>
+
                           <button
                             onClick={() => desmarcarCurso(c)}
-                            className="text-xs font-medium text-muted-foreground hover:text-red-600 underline underline-offset-2 transition-colors cursor-pointer"
+                            className="text-xs font-medium text-muted-foreground hover:text-destructive transition-colors"
                           >
-                            Desmarcar conclusão
+                            Desmarcar
                           </button>
                         </div>
                       ) : (
                         <button
                           onClick={() => concluirCurso(c)}
-                          className="w-full px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 hover:-translate-y-0.5 transition-all"
+                          className="w-full h-11 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.99] transition-all"
                         >
                           Marcar como concluído
                         </button>

@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+
 import {
   API,
   TENANT_ID,
@@ -8,6 +9,13 @@ import {
   PageShell,
   Card,
 } from "@/components/minddesk";
+
+import {
+  ArrowLeft,
+  Plus,
+  SendHorizonal,
+  Paperclip,
+} from "lucide-react";
 
 import chatIllus from "@/assets/illus-chat.png";
 
@@ -21,9 +29,18 @@ type Msg = {
   text: string;
 };
 
+// Interface auxiliar para pegar dados do usuário logado se necessário
+interface UserSessionData {
+  id: string;
+  role?: string;
+  cargo?: string;
+}
+
 function ChatPage() {
   const navigate = useNavigate();
+
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [messages, setMessages] = useState<Msg[]>([
     {
@@ -48,6 +65,22 @@ function ChatPage() {
     });
   }, [messages, isTyping]);
 
+  // Função para simular a extração do ID do usuário a partir do token/localStorage
+  const getLoggedUserId = (): string => {
+    try {
+      const session = localStorage.getItem("user_session"); // Altere para onde guarda os dados do usuário se necessário
+      if (session) {
+        const user = JSON.parse(session) as UserSessionData;
+        return user.id;
+      }
+    } catch (e) {
+      console.error("Erro ao obter ID do usuário", e);
+    }
+    // Fallback temporário (O ideal é puxar direto do estado global/auth ou decodificar o JWT do getToken())
+    return "usuario-logado-id"; 
+  };
+
+  // Envio de texto simples (Rota /perguntar)
   const handleSend = async () => {
     if (!input.trim() || isTyping) return;
 
@@ -58,7 +91,6 @@ function ChatPage() {
     };
 
     setMessages((prev) => [...prev, userMsg]);
-
     setInput("");
     setIsTyping(true);
 
@@ -75,8 +107,68 @@ function ChatPage() {
         }),
       });
 
+      if (!res.ok) throw new Error();
+
+      const data = await res.json();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          type: "ai",
+          text: data.answer || "Não foi possível gerar uma resposta.",
+        },
+      ]);
+    } catch {
+      showErrorAlert();
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  // Envio do arquivo de Atestado/Foto integrado ao seu Controller do Supabase
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || isTyping) return;
+
+    // Mensagem de feedback visual no Chat
+    const userMsg: Msg = {
+      id: Date.now(),
+      type: "user",
+      text: ` Enviando documento: ${file.name}`,
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setIsTyping(true);
+
+    // Criando o Multipart FormData exigido pelo Multer no Backend
+    const formData = new FormData();
+    formData.append("file", file); // Vincula ao 'req.file' do backend
+    formData.append("tenant_id", String(TENANT_ID));
+    formData.append("usuario_id", getLoggedUserId());
+    
+    // Como o upload foi feito pelo Chat, definimos valores padrão coerentes 
+    // ou usamos a data atual caso o usuário não tenha preenchido um formulário específico.
+    const dataAtualYMD = new Date().toISOString().split("T")[0];
+    formData.append("data_emissao", dataAtualYMD); 
+    formData.append("dias_afastamento", "1"); // Valor padrão inicial
+    formData.append("motivo_cid", input.trim() || "Enviado via Chat de IA"); 
+
+    setInput("");
+
+    try {
+      // Endpoint que aponta diretamente para o método 'uploadAtestado' do seu backend
+      const res = await fetch(`${API}/atestados/upload`, { 
+        method: "POST",
+        headers: {
+          ...authHeaders(), // Não defina Content-Type aqui para o navegador injetar o boundary do FormData automaticamente
+        },
+        body: formData,
+      });
+
       if (!res.ok) {
-        throw new Error();
+        const errData = await res.json();
+        throw new Error(errData.error || "Erro no upload");
       }
 
       const data = await res.json();
@@ -86,24 +178,33 @@ function ChatPage() {
         {
           id: Date.now() + 1,
           type: "ai",
-          text:
-            data.answer ||
-            "Não foi possível gerar uma resposta.",
+          text: ` ${data.message || "Atestado recebido e enviado para análise do RH!"}\nVocê pode visualizá-lo aqui se desejar provisoriamente.`,
         },
       ]);
-    } catch {
+    } catch (error: any) {
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now() + 1,
           type: "ai",
-          text:
-            "Desculpe, ocorreu um erro. Tente novamente.",
+          text: ` Falha ao processar atestado: ${error.message || "Tente novamente."}`,
         },
       ]);
-    } finally {
+    } {
       setIsTyping(false);
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Reseta o campo de upload
     }
+  };
+
+  const showErrorAlert = () => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now() + 1,
+        type: "ai",
+        text: "Desculpe, ocorreu um erro. Tente novamente.",
+      },
+    ]);
   };
 
   const handleNewChat = () => {
@@ -120,90 +221,185 @@ function ChatPage() {
 
   return (
     <PageShell>
-      <div className="min-h-screen grid place-items-center p-4 md:p-6">
-        <Card className="w-full max-w-[920px] h-[calc(100vh-3rem)] max-h-[760px] flex flex-col overflow-hidden border border-border/50 bg-card backdrop-blur-sm shadow-2xl">
-
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 min-h-[72px] bg-primary text-primary-foreground border-b border-border/40">
+      <div
+        className="
+          min-h-screen
+          grid place-items-center
+          p-3 sm:p-4 md:p-6
+          bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.10),transparent_35%)]
+          dark:bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.16),transparent_35%)]
+        "
+      >
+        <Card
+          className="
+            w-full
+            max-w-[980px]
+            h-[calc(100vh-1.5rem)]
+            md:h-[calc(100vh-3rem)]
+            max-h-[920px]
+            flex flex-col
+            overflow-hidden
+            rounded-[32px]
+            border border-black/5
+            dark:border-white/10
+            bg-white/90
+            dark:bg-[#0f1115]/90
+            backdrop-blur-2xl
+            shadow-[0_10px_60px_rgba(0,0,0,0.08)]
+          "
+        >
+          {/* HEADER */}
+          <div
+            className="
+              flex items-center justify-between
+              px-4 sm:px-5
+              min-h-[78px]
+              border-b border-black/5
+              dark:border-white/10
+              bg-white/70
+              dark:bg-white/[0.02]
+              backdrop-blur-xl
+            "
+          >
+            {/* LEFT */}
             <button
               onClick={() => navigate({ to: "/manager" })}
-              className="px-3 py-1.5 text-xs font-medium rounded-md bg-white/15 border border-white/20 hover:bg-white/25 transition-colors"
+              className="
+                h-11 px-4
+                rounded-2xl
+                flex items-center gap-2
+                bg-black/[0.03]
+                dark:bg-white/[0.05]
+                border border-black/5
+                dark:border-white/10
+                text-sm font-medium
+                text-zinc-700
+                dark:text-white
+                hover:bg-black/[0.05]
+                dark:hover:bg-white/[0.08]
+                transition-all
+              "
             >
-              ← Voltar
+              <ArrowLeft size={16} />
+              Voltar
             </button>
 
-            <div className="flex items-center gap-2.5 font-semibold text-sm">
-              <span className="w-2.5 h-2.5 rounded-full bg-accent md-dot" />
-              MindDesk Assistant
+            {/* CENTER */}
+            <div className="flex items-center gap-3">
+              <div
+                className="
+                  w-11 h-11
+                  rounded-2xl
+                  bg-primary/10
+                  border border-primary/10
+                  flex items-center justify-center
+                  text-primary
+                  font-bold
+                  text-sm
+                "
+              >
+                AI
+              </div>
+
+              <div className="leading-tight hidden sm:block">
+                <div className="text-sm font-semibold text-zinc-900 dark:text-white">
+                  MindDesk Assistant
+                </div>
+                <div className="text-xs text-zinc-500 dark:text-white/50">
+                  Assistente virtual de RH
+                </div>
+              </div>
             </div>
 
+            {/* RIGHT */}
             <button
               onClick={handleNewChat}
-              className="px-3 py-1.5 text-xs font-medium rounded-md bg-white/15 border border-white/20 hover:bg-white/25 transition-colors"
+              className="
+                h-11 px-4
+                rounded-2xl
+                flex items-center gap-2
+                bg-primary
+                text-white
+                text-sm font-medium
+                hover:opacity-90
+                transition-all
+              "
             >
-              + Nova conversa
+              <Plus size={16} />
+              <span className="hidden sm:inline">Nova conversa</span>
             </button>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 bg-background">
-
+          {/* MESSAGES */}
+          <div
+            className="
+              flex-1
+              overflow-y-auto
+              px-4 sm:px-6
+              py-6
+              flex flex-col
+              gap-5
+              bg-transparent
+            "
+          >
+            {/* HERO */}
             {messages.length === 1 && (
-              <div className="flex justify-center mb-2">
+              <div className="flex flex-col items-center justify-center py-8 sm:py-12">
                 <img
                   src={chatIllus}
                   alt=""
-                  width={160}
-                  height={160}
+                  width={180}
+                  height={180}
                   loading="lazy"
-                  className="w-40 h-auto opacity-90"
+                  className="w-50 sm:w-52 h-auto object-contain opacity-95"
                 />
+                <h2 className="mt-5 text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-white tracking-tight text-center">
+                  Como posso ajudar?
+                </h2>
+                <p className="mt-2 text-sm sm:text-base text-zinc-500 dark:text-white/50 text-center max-w-md leading-relaxed">
+                  Tire dúvidas sobre RH, férias, documentos, treinamentos e envie fotos ou atestados médicos.
+                </p>
               </div>
             )}
 
+            {/* CHAT LIST */}
             {messages.map((m) => (
               <div
                 key={m.id}
-                className={`flex items-end gap-2 w-full ${
-                  m.type === "user"
-                    ? "justify-end"
-                    : "justify-start"
+                className={`flex w-full ${
+                  m.type === "user" ? "justify-end" : "justify-start"
                 }`}
               >
-                {m.type === "ai" && (
-                  <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-bold flex-shrink-0 shadow-md">
-                    AI
-                  </div>
-                )}
-
                 <div
-                  className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm transition-colors ${
-                    m.type === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-sm"
-                      : "bg-card text-card-foreground rounded-bl-sm border border-border/60"
-                  }`}
+                  className={`
+                    max-w-[88%] sm:max-w-[75%]
+                    px-4 sm:px-5
+                    py-3.5
+                    rounded-[26px]
+                    text-[15px]
+                    leading-relaxed
+                    shadow-sm
+                    transition-all
+                    whitespace-pre-line
+                    ${
+                      m.type === "user"
+                        ? `bg-primary text-white rounded-br-md shadow-lg shadow-primary/10`
+                        : `bg-white dark:bg-white/[0.04] border border-black/5 dark:border-white/10 text-zinc-800 dark:text-white/90 rounded-bl-md`
+                    }
+                  `}
                 >
                   {m.text}
                 </div>
               </div>
             ))}
 
+            {/* TYPING INDICATOR */}
             {isTyping && (
-              <div className="flex items-end gap-2">
-                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-bold shadow-md">
-                  AI
-                </div>
-
-                <div className="bg-card border border-border/60 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 shadow-sm">
-                  <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full md-dot" />
-                  <span
-                    className="w-1.5 h-1.5 bg-muted-foreground rounded-full md-dot"
-                    style={{ animationDelay: ".2s" }}
-                  />
-                  <span
-                    className="w-1.5 h-1.5 bg-muted-foreground rounded-full md-dot"
-                    style={{ animationDelay: ".4s" }}
-                  />
+              <div className="flex justify-start">
+                <div className="px-4 py-3 rounded-[24px] rounded-bl-md bg-white dark:bg-white/[0.04] border border-black/5 dark:border-white/10 flex items-center gap-1.5 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce" />
+                  <span className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: ".15s" }} />
+                  <span className="w-2 h-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: ".3s" }} />
                 </div>
               </div>
             )}
@@ -211,33 +407,110 @@ function ChatPage() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Input */}
+          {/* INPUT FORM */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSend();
             }}
-            className="flex gap-2 p-4 border-t border-border bg-card"
+            className="
+              p-4 sm:p-5
+              border-t border-black/5
+              dark:border-white/10
+              bg-white/70
+              dark:bg-white/[0.02]
+              backdrop-blur-xl
+            "
           >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Pergunte algo sobre RH..."
-              disabled={isTyping}
-              className="flex-1 px-4 py-2.5 border-[1.5px] border-border bg-background text-foreground rounded-xl text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-            />
-
-            <button
-              type="submit"
-              disabled={isTyping || !input.trim()}
-              className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:bg-primary/90 disabled:opacity-50 transition-all active:scale-95"
+            <div
+              className="
+                flex items-center gap-2
+                p-2
+                rounded-[28px]
+                bg-white
+                dark:bg-white/[0.04]
+                border border-black/5
+                dark:border-white/10
+                shadow-sm
+              "
             >
-              Enviar
-            </button>
+              {/* INPUT DE ARQUIVOS OCULTO */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                disabled={isTyping}
+                accept="image/*, .pdf, .doc, .docx, .xls, .xlsx"
+                className="hidden"
+              />
+              
+              {/* BOTÃO DE CLIP/UPLOAD ESTILIZADO */}
+              <button
+                type="button"
+                disabled={isTyping}
+                onClick={() => fileInputRef.current?.click()}
+                title="Fazer upload de documento ou foto"
+                className="
+                  w-12 h-12
+                  rounded-2xl
+                  flex items-center justify-center
+                  bg-black/[0.03] dark:bg-white/[0.05]
+                  text-zinc-500 dark:text-white/60
+                  hover:bg-black/[0.06] dark:hover:bg-white/[0.1]
+                  active:scale-95
+                  disabled:opacity-40
+                  transition-all
+                  ml-1
+                "
+              >
+                <Paperclip size={18} />
+              </button>
+
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Escreva algo ou anexe um atestado no clipe..."
+                disabled={isTyping}
+                className="
+                  flex-1
+                  bg-transparent
+                  px-2 sm:px-3
+                  py-3
+                  text-sm sm:text-[15px]
+                  text-zinc-800
+                  dark:text-white
+                  placeholder:text-zinc-400
+                  dark:placeholder:text-white/30
+                  outline-none
+                "
+              />
+
+              <button
+                type="submit"
+                disabled={isTyping || !input.trim()}
+                className="
+                  w-12 h-12
+                  rounded-2xl
+                  flex items-center justify-center
+                  bg-primary
+                  text-white
+                  shadow-lg shadow-primary/20
+                  hover:scale-[1.03]
+                  active:scale-95
+                  disabled:opacity-50
+                  disabled:hover:scale-100
+                  transition-all
+                "
+              >
+                <SendHorizonal size={18} />
+              </button>
+            </div>
           </form>
         </Card>
       </div>
     </PageShell>
   );
 }
+
+export default ChatPage;
