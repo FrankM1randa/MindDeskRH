@@ -39,7 +39,7 @@ exports.listarTodosCursos = async (req, res) => {
 // =========================================
 exports.enviarCurso = async (req, res) => {
     try {
-        const { usuarios_ids, titulo, link, descricao } = req.body;
+        const { usuarios_ids, titulo, link, descricao,status, prazo } = req.body;
         const tenant_id = Number(req.user.tenant_id);
         const criado_por = String(req.user.id).trim();
 
@@ -57,7 +57,9 @@ exports.enviarCurso = async (req, res) => {
                 titulo,
                 link,
                 descricao: descricao || null,
-                criado_por
+                criado_por,
+                status: 'pendente',
+                prazo
             });
         } 
         // SE SELECIONOU FUNCIONÁRIOS -> Insere uma linha para cada
