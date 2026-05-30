@@ -1,35 +1,58 @@
 const supabase = require('../config/supabase');
 
+// =========================================
+// Listar cursos do usuário logado
+// =========================================
 exports.listarCursos = async (req, res) => {
     try {
         const usuario_id = String(req.user.id).trim();
+        console.log(`[listarCursos] Iniciando busca para usuario_id: ${usuario_id}`);
 
         const { data, error } = await supabase
             .from('cursos')
+            // O '*' já traz 'status' e 'prazo_dias' da tabela cursos.
+            // Puxamos de usuarios apenas o que existe lá.
             .select('*, usuarios!cursos_usuario_id_fkey (nome, email, cargo)')
             .eq('usuario_id', usuario_id)
             .order('created_at', { ascending: false });
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+            console.error(`[listarCursos] Erro no Supabase: ${error.message}`);
+            return res.status(500).json({ error: error.message });
+        }
+
+        console.log(`[listarCursos] Sucesso: ${data.length} curso(s) retornado(s).`);
         return res.json(data);
     } catch (err) {
+        console.error(`[listarCursos] Erro interno:`, err);
         return res.status(500).json({ error: 'Erro interno.' });
     }
 };
 
+// =========================================
+// Listar todos os cursos do Tenant (Admin/Gerente)
+// =========================================
 exports.listarTodosCursos = async (req, res) => {
     try {
         const tenant_id = Number(req.user.tenant_id);
+        console.log(`[listarTodosCursos] Iniciando busca para tenant_id: ${tenant_id}`);
 
         const { data, error } = await supabase
             .from('cursos')
+            // Mesma correção aplicada aqui
             .select(`*, usuarios!cursos_usuario_id_fkey (nome, email, cargo)`)
             .eq('tenant_id', tenant_id)
             .order('created_at', { ascending: false });
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+            console.error(`[listarTodosCursos] Erro no Supabase: ${error.message}`);
+            return res.status(500).json({ error: error.message });
+        }
+
+        console.log(`[listarTodosCursos] Sucesso: ${data.length} curso(s) retornado(s).`);
         return res.json(data);
     } catch (err) {
+        console.error(`[listarTodosCursos] Erro interno:`, err);
         return res.status(500).json({ error: 'Erro interno.' });
     }
 };
@@ -39,11 +62,14 @@ exports.listarTodosCursos = async (req, res) => {
 // =========================================
 exports.enviarCurso = async (req, res) => {
     try {
-        const { usuarios_ids, titulo, link, descricao,status, prazo } = req.body;
+        const { usuarios_ids, titulo, link, descricao, status, prazo_dias } = req.body;
         const tenant_id = Number(req.user.tenant_id);
         const criado_por = String(req.user.id).trim();
 
+        console.log(`[enviarCurso] Recebida solicitação para criar curso: "${titulo}" (tenant_id: ${tenant_id})`);
+
         if (!titulo || !link) {
+            console.error(`[enviarCurso] Erro de validação: Título e link não fornecidos.`);
             return res.status(400).json({ error: 'Título e link são obrigatórios.' });
         }
 
@@ -51,6 +77,7 @@ exports.enviarCurso = async (req, res) => {
 
         // SE NÃO SELECIONOU NINGUÉM -> Salva apenas no catálogo (usuario_id = null)
         if (!usuarios_ids || usuarios_ids.length === 0) {
+            console.log(`[enviarCurso] Nenhum usuário selecionado. Inserindo apenas no catálogo.`);
             cursosParaInserir.push({
                 tenant_id,
                 usuario_id: null,
@@ -59,18 +86,21 @@ exports.enviarCurso = async (req, res) => {
                 descricao: descricao || null,
                 criado_por,
                 status: 'pendente',
-                prazo
+                prazo_dias
             });
         } 
         // SE SELECIONOU FUNCIONÁRIOS -> Insere uma linha para cada
         else {
+            console.log(`[enviarCurso] ${usuarios_ids.length} usuário(s) selecionado(s). Preparando inserção em lote.`);
             cursosParaInserir = usuarios_ids.map(id => ({
                 tenant_id,
                 usuario_id: String(id).trim(),
                 titulo,
                 link,
                 descricao: descricao || null,
-                criado_por
+                criado_por,
+                status: 'pendente',
+                prazo_dias
             }));
         }
 
@@ -79,10 +109,15 @@ exports.enviarCurso = async (req, res) => {
             .insert(cursosParaInserir)
             .select();
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+            console.error(`[enviarCurso] Erro no Supabase ao inserir: ${error.message}`);
+            return res.status(500).json({ error: error.message });
+        }
 
+        console.log(`[enviarCurso] Sucesso: ${cursosParaInserir.length} registro(s) inserido(s).`);
         return res.status(201).json({ message: `Ação realizada com sucesso!`, cursos: data });
     } catch (err) {
+        console.error(`[enviarCurso] Erro interno:`, err);
         return res.status(500).json({ error: 'Erro interno.' });
     }
 };
@@ -95,26 +130,38 @@ exports.deletarCurso = async (req, res) => {
         const { id } = req.params;
         const tenant_id = Number(req.user.tenant_id);
 
+        console.log(`[deletarCurso] Solicitada exclusão do registro ID: ${id} (tenant_id: ${tenant_id})`);
+
         // 1. Busca qual é o link do curso que está sendo deletado
-        const { data: curso } = await supabase
+        const { data: curso, error: fetchError } = await supabase
             .from('cursos')
             .select('link')
             .eq('id', id)
             .single();
 
-        if (!curso) return res.status(404).json({ error: 'Curso não encontrado.' });
+        if (fetchError || !curso) {
+            console.error(`[deletarCurso] Erro: Curso ID ${id} não encontrado ou erro na busca (${fetchError?.message || 'Nenhum dado'}).`);
+            return res.status(404).json({ error: 'Curso não encontrado.' });
+        }
+
+        console.log(`[deletarCurso] Curso encontrado. Deletando todos os registros do tenant com o link: ${curso.link}`);
 
         // 2. Deleta TODOS os registros do tenant que tenham o mesmo link
-        const { error } = await supabase
+        const { error: deleteError } = await supabase
             .from('cursos')
             .delete()
             .eq('link', curso.link)
             .eq('tenant_id', tenant_id);
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (deleteError) {
+            console.error(`[deletarCurso] Erro no Supabase ao deletar: ${deleteError.message}`);
+            return res.status(500).json({ error: deleteError.message });
+        }
 
+        console.log(`[deletarCurso] Sucesso: Curso e suas atribuições foram totalmente removidos.`);
         return res.json({ message: 'Curso e todas as atribuições removidos com sucesso.' });
     } catch (err) {
+        console.error(`[deletarCurso] Erro interno:`, err);
         return res.status(500).json({ error: 'Erro interno.' });
     }
 };
