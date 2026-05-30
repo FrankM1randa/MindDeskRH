@@ -190,9 +190,9 @@ exports.concluirCurso = async (req, res) => {
             return res.status(404).json({ error: 'Curso não encontrado ou sem permissão.' });
         }
 
-        // 2. Prepara as datas para o cálculo
+        // 2. Prepara as datas para o cálculo (padrão YYYY-MM-DD exigido pela sua coluna date)
         const dataAtualObj = new Date();
-        const dataConclusaoStr = dataAtualObj.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+        const dataConclusaoStr = dataAtualObj.toISOString().split('T')[0]; 
         
         let prazoLimiteStr = null;
         let concluidoNoPrazo = true;
@@ -211,14 +211,14 @@ exports.concluirCurso = async (req, res) => {
             concluidoNoPrazo = entregue <= limite;
         }
 
-        // 3. INSERE NA TABELA DE AUDITORIA (A tabela da sua imagem!)
+        // 3. INSERE NA TABELA DE AUDITORIA (Exatamente com as colunas da sua imagem!)
         const { error: insertError } = await supabase
             .from('historico_cursos') 
             .insert([{
                 tenant_id: tenant_id,
                 usuario_id: usuario_id,
                 nome_curso: curso.titulo,
-                obrigatorio: true, // Ou false, dependendo da sua regra de negócio
+                obrigatorio: false, // Você pode ajustar essa regra de negócio futuramente
                 prazo_limite: prazoLimiteStr,
                 data_conclusao: dataConclusaoStr,
                 concluido_no_prazo: concluidoNoPrazo
@@ -229,12 +229,12 @@ exports.concluirCurso = async (req, res) => {
             return res.status(500).json({ error: 'Erro ao registrar histórico.' });
         }
 
-        // 4. ATUALIZA A TABELA ORIGINAL para mudar o status visual
+        // 4. ATUALIZA A TABELA ORIGINAL para mudar o status visual 
+        // ⚠️ Aqui estava o erro! Removemos a tentativa de inserir data numa tabela que não tem a coluna
         const { error: updateError } = await supabase
             .from('cursos')
             .update({ 
-                status: 'concluido',
-                concluido_em: dataAtualObj.toISOString()
+                status: 'concluido'
             })
             .eq('id', id);
 

@@ -11,7 +11,7 @@ const { listarCursos, listarTodosCursos, enviarCurso, deletarCurso, concluirCurs
 router.get('/', authMiddleware, listarCursos);
 
 // Funcionário conclui o curso (Apenas authMiddleware, pois o funcionário precisa ter acesso)
-router.patch('/:id/concluir', authMiddleware, concluirCurso);
+router.post('/:id/concluir', authMiddleware, concluirCurso);
 
 // =========================================
 // Rotas do Admin/Gerente
