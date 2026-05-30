@@ -68,7 +68,7 @@ function ChatPage() {
   // Função para simular a extração do ID do usuário a partir do token/localStorage
   const getLoggedUserId = (): string => {
     try {
-      const session = localStorage.getItem("user_session"); // Altere para onde guarda os dados do usuário se necessário
+      const session = localStorage.getItem("user_session");
       if (session) {
         const user = JSON.parse(session) as UserSessionData;
         return user.id;
@@ -76,8 +76,28 @@ function ChatPage() {
     } catch (e) {
       console.error("Erro ao obter ID do usuário", e);
     }
-    // Fallback temporário (O ideal é puxar direto do estado global/auth ou decodificar o JWT do getToken())
-    return "usuario-logado-id"; 
+    return "usuario-logado-id";
+  };
+
+  // ✅ CORREÇÃO: Função que converte markdown básico em elementos React
+  const renderText = (text: string) => {
+    return text.split("\n").map((line, lineIdx, linesArr) => {
+      const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+      return (
+        <span key={lineIdx}>
+          {parts.map((part, i) => {
+            if (part.startsWith("**") && part.endsWith("**")) {
+              return <strong key={i}>{part.slice(2, -2)}</strong>;
+            }
+            if (part.startsWith("*") && part.endsWith("*")) {
+              return <em key={i}>{part.slice(1, -1)}</em>;
+            }
+            return <span key={i}>{part}</span>;
+          })}
+          {lineIdx < linesArr.length - 1 && <br />}
+        </span>
+      );
+    });
   };
 
   // Envio de texto simples (Rota /perguntar)
@@ -131,7 +151,6 @@ function ChatPage() {
     const file = e.target.files?.[0];
     if (!file || isTyping) return;
 
-    // Mensagem de feedback visual no Chat
     const userMsg: Msg = {
       id: Date.now(),
       type: "user",
@@ -141,27 +160,23 @@ function ChatPage() {
     setMessages((prev) => [...prev, userMsg]);
     setIsTyping(true);
 
-    // Criando o Multipart FormData exigido pelo Multer no Backend
     const formData = new FormData();
-    formData.append("file", file); // Vincula ao 'req.file' do backend
+    formData.append("file", file);
     formData.append("tenant_id", String(TENANT_ID));
     formData.append("usuario_id", getLoggedUserId());
-    
-    // Como o upload foi feito pelo Chat, definimos valores padrão coerentes 
-    // ou usamos a data atual caso o usuário não tenha preenchido um formulário específico.
+
     const dataAtualYMD = new Date().toISOString().split("T")[0];
-    formData.append("data_emissao", dataAtualYMD); 
-    formData.append("dias_afastamento", "1"); // Valor padrão inicial
-    formData.append("motivo_cid", input.trim() || "Enviado via Chat de IA"); 
+    formData.append("data_emissao", dataAtualYMD);
+    formData.append("dias_afastamento", "1");
+    formData.append("motivo_cid", input.trim() || "Enviado via Chat de IA");
 
     setInput("");
 
     try {
-      // Endpoint que aponta diretamente para o método 'uploadAtestado' do seu backend
-      const res = await fetch(`${API}/atestados/upload`, { 
+      const res = await fetch(`${API}/atestados/upload`, {
         method: "POST",
         headers: {
-          ...authHeaders(), // Não defina Content-Type aqui para o navegador injetar o boundary do FormData automaticamente
+          ...authHeaders(),
         },
         body: formData,
       });
@@ -190,9 +205,9 @@ function ChatPage() {
           text: ` Falha ao processar atestado: ${error.message || "Tente novamente."}`,
         },
       ]);
-    } {
+    } finally {
       setIsTyping(false);
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Reseta o campo de upload
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -380,7 +395,6 @@ function ChatPage() {
                     leading-relaxed
                     shadow-sm
                     transition-all
-                    whitespace-pre-line
                     ${
                       m.type === "user"
                         ? `bg-primary text-white rounded-br-md shadow-lg shadow-primary/10`
@@ -388,7 +402,8 @@ function ChatPage() {
                     }
                   `}
                 >
-                  {m.text}
+                  {/* ✅ CORREÇÃO: usa renderText em vez de {m.text} direto */}
+                  {renderText(m.text)}
                 </div>
               </div>
             ))}
@@ -443,7 +458,7 @@ function ChatPage() {
                 accept="image/*, .pdf, .doc, .docx, .xls, .xlsx"
                 className="hidden"
               />
-              
+
               {/* BOTÃO DE CLIP/UPLOAD ESTILIZADO */}
               <button
                 type="button"

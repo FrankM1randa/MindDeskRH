@@ -23,6 +23,7 @@ type Curso = {
   cargaHoraria?: number;
   concluido: boolean;
   concluidoEm?: string;
+  data_limite?: string; // Nova propriedade mapeada vinda da API
 };
 
 function CursosPage() {
@@ -47,17 +48,15 @@ function CursosPage() {
 
   const fetchCursos = async () => {
     setLoading(true);
-
     try {
       const res = await fetch(`${API}/cursos`, {
         headers: authHeaders(),
       });
-
       if (!res.ok) throw new Error();
-
       const data = await res.json();
       setCursos(data || []);
     } catch {
+      // Mock de segurança caso falhe, adicionado campo data_limite para testes locais
       setCursos([
         {
           id: 1,
@@ -65,6 +64,7 @@ function CursosPage() {
           descricao: "Princípios de conduta corporativa.",
           cargaHoraria: 4,
           concluido: false,
+          data_limite: "2026-06-15",
         },
         {
           id: 2,
@@ -72,6 +72,7 @@ function CursosPage() {
           descricao: "NRs essenciais e prevenção de acidentes.",
           cargaHoraria: 6,
           concluido: false,
+          data_limite: "2026-05-20", // Data passada para testar o 'Atrasado'
         },
         {
           id: 3,
@@ -89,14 +90,10 @@ function CursosPage() {
 
   const concluirCurso = async (curso: Curso) => {
     setAlert({ msg: "", type: "success" });
-
     try {
       await fetch(`${API}/cursos/${curso.id}/concluir`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders(),
-        },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
       });
     } catch {}
 
@@ -120,14 +117,10 @@ function CursosPage() {
 
   const desmarcarCurso = async (curso: Curso) => {
     setAlert({ msg: "", type: "success" });
-
     try {
       await fetch(`${API}/cursos/${curso.id}/desmarcar`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders(),
-        },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
       });
     } catch {}
 
@@ -151,12 +144,46 @@ function CursosPage() {
 
   const pendentes = cursos.filter((c) => !c.concluido);
   const concluidos = cursos.filter((c) => c.concluido);
-
   const lista = aba === "pendentes" ? pendentes : concluidos;
 
   const progresso = cursos.length
     ? Math.round((concluidos.length / cursos.length) * 100)
     : 0;
+
+  // Função auxiliar para calcular o status do prazo
+  const renderPrazo = (dateStr?: string) => {
+    if (!dateStr) return null;
+    
+    const limite = new Date(dateStr + "T23:59:59");
+    const hoje = new Date();
+    
+    // Zera horas para comparação justa de dias
+    limite.setHours(0,0,0,0);
+    hoje.setHours(0,0,0,0);
+
+    const diffTime = limite.getTime() - hoje.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-bold text-destructive bg-destructive/10 px-2.5 py-1 rounded-lg">
+          ⚠️ Atrasado (prazo expirou em {new Date(dateStr + "T00:00:00").toLocaleDateString("pt-BR")})
+        </span>
+      );
+    } else if (diffDays === 0) {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-500/10 px-2.5 py-1 rounded-lg">
+          ⏰ Termina HOJE!
+        </span>
+      );
+    } else {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground bg-secondary px-2.5 py-1 rounded-lg">
+          🗓️ Terminar até: {new Date(dateStr + "T00:00:00").toLocaleDateString("pt-BR")} ({diffDays} dias restantes)
+        </span>
+      );
+    }
+  };
 
   return (
     <PageShell>
@@ -184,181 +211,105 @@ function CursosPage() {
                   <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
                     Meus Cursos
                   </h1>
-
                   <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
                     Acompanhe seus treinamentos e progresso.
                   </p>
                 </div>
               </div>
 
-              {/* progresso */}
+              {/* Progresso */}
               <div className="w-full sm:w-[210px] rounded-2xl border border-border bg-secondary/40 p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Progresso
-                  </span>
-
-                  <span className="text-lg font-bold text-primary">
-                    {progresso}%
-                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">Progresso</span>
+                  <span className="text-lg font-bold text-primary">{progresso}%</span>
                 </div>
-
                 <div className="w-full h-2 rounded-full bg-background overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-300"
-                    style={{ width: `${progresso}%` }}
-                  />
+                  <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${progresso}%` }} />
                 </div>
-
-                <p className="text-[11px] text-muted-foreground mt-2">
-                  {concluidos.length} de {cursos.length} concluídos
-                </p>
               </div>
             </div>
 
-            {/* ALERT */}
-            {alert.msg && (
-              <div className="mb-5">
-                <Alert type={alert.type} msg={alert.msg} />
-              </div>
-            )}
-
-            {/* TABS */}
-            <div className="flex bg-secondary/60 border border-border rounded-2xl p-1 mb-6 overflow-hidden">
+            {/* Abas Alternadoras */}
+            <div className="flex gap-2 p-1 bg-secondary/60 rounded-xl mb-6">
               <button
                 onClick={() => setAba("pendentes")}
-                className={`flex-1 h-11 rounded-xl text-sm font-semibold transition-all ${
-                  aba === "pendentes"
-                    ? "bg-card shadow-sm text-primary"
-                    : "text-muted-foreground"
+                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${
+                  aba === "pendentes" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
                 }`}
               >
                 Pendentes ({pendentes.length})
               </button>
-
               <button
                 onClick={() => setAba("concluidos")}
-                className={`flex-1 h-11 rounded-xl text-sm font-semibold transition-all ${
-                  aba === "concluidos"
-                    ? "bg-card shadow-sm text-primary"
-                    : "text-muted-foreground"
+                className={`flex-1 h-10 rounded-lg text-sm font-semibold transition ${
+                  aba === "concluidos" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
                 }`}
               >
                 Concluídos ({concluidos.length})
               </button>
             </div>
 
-            {/* LISTA */}
-            {loading ? (
-              <div className="py-16 text-center">
-                <div className="w-10 h-10 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />
-
-                <p className="text-sm text-muted-foreground">
-                  Carregando cursos...
-                </p>
+            {alert.msg && (
+              <div className="mb-6">
+                <Alert type={alert.type} msg={alert.msg} />
               </div>
-            ) : lista.length === 0 ? (
-              <div className="py-16 text-center border border-dashed border-border rounded-3xl bg-secondary/20">
-                <div className="w-14 h-14 rounded-2xl bg-secondary mx-auto mb-4" />
+            )}
 
-                <h3 className="text-sm font-semibold mb-1">
-                  Nenhum curso encontrado
-                </h3>
-
-                <p className="text-xs text-muted-foreground">
-                  {aba === "pendentes"
-                    ? "Você não possui cursos pendentes."
-                    : "Você ainda não concluiu nenhum curso."}
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {lista.map((c) => (
-                  <div
-                    key={c.id}
-                    className="group rounded-3xl border border-border bg-card p-5 transition-all hover:border-primary/20 hover:shadow-md"
-                  >
-                    {/* topo */}
-                    <div className="flex items-start gap-3 mb-4">
-                      <div
-                        className={`w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center border ${
-                          c.concluido
-                            ? "bg-emerald-500/10 border-emerald-500/20"
-                            : "bg-primary/10 border-primary/15"
-                        }`}
-                      >
-                        <div
-                          className={`w-4 h-4 rounded-full ${
-                            c.concluido
-                              ? "bg-emerald-500"
-                              : "bg-primary"
-                          }`}
-                        />
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-[15px] sm:text-base font-semibold leading-tight text-foreground">
-                          {c.titulo}
-                        </h3>
-
-                        {c.descricao && (
-                          <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed line-clamp-2">
-                            {c.descricao}
-                          </p>
+            {/* Listagem dos Cursos */}
+            <div className="space-y-4">
+              {loading ? (
+                <p className="text-center text-sm text-muted-foreground py-10">Carregando seus cursos...</p>
+              ) : lista.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground py-10">Nenhum curso nesta aba.</p>
+              ) : (
+                lista.map((curso) => (
+                  <div key={curso.id} className="p-5 border border-border rounded-2xl bg-card/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-primary/20 transition">
+                    <div className="space-y-1 max-w-xl">
+                      <h3 className="font-bold text-base text-foreground">{curso.titulo}</h3>
+                      {curso.descricao && <p className="text-sm text-muted-foreground">{curso.descricao}</p>}
+                      
+                      <div className="flex flex-wrap items-center gap-3 pt-2">
+                        {curso.cargaHoraria && (
+                          <span className="text-xs bg-secondary px-2 py-1 rounded-md font-medium text-muted-foreground">
+                            {curso.cargaHoraria} horas
+                          </span>
+                        )}
+                        
+                        {/* Render do Prazo Limite */}
+                        {!curso.concluido && renderPrazo(curso.data_limite)}
+                        
+                        {curso.concluido && curso.concluidoEm && (
+                          <span className="text-xs text-emerald-600 font-medium">
+                            ✓ Concluído em {new Date(curso.concluidoEm).toLocaleDateString("pt-BR")}
+                          </span>
                         )}
                       </div>
                     </div>
 
-                    {/* infos */}
-                    <div className="flex items-center justify-between gap-3 mb-5">
-                      {c.cargaHoraria ? (
-                        <div className="px-3 py-1.5 rounded-full bg-secondary text-[11px] font-medium text-muted-foreground">
-                          {c.cargaHoraria}h de conteúdo
-                        </div>
-                      ) : (
-                        <div />
-                      )}
-
-                      {c.concluido && c.concluidoEm && (
-                        <span className="text-[11px] text-emerald-600 font-medium">
-                          {new Date(c.concluidoEm).toLocaleDateString("pt-BR")}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* ação */}
-                    <div className="mt-auto">
-                      {c.concluido ? (
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
-                          <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-xs font-semibold">
-                            Concluído
-                          </div>
-
-                          <button
-                            onClick={() => desmarcarCurso(c)}
-                            className="text-xs font-medium text-muted-foreground hover:text-destructive transition-colors"
-                          >
-                            Desmarcar
-                          </button>
-                        </div>
+                    <div>
+                      {curso.concluido ? (
+                        <button
+                          onClick={() => desmarcarCurso(curso)}
+                          className="w-full sm:w-auto h-10 px-4 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-destructive hover:border-destructive/30 transition"
+                        >
+                          Refazer curso
+                        </button>
                       ) : (
                         <button
-                          onClick={() => concluirCurso(c)}
-                          className="w-full h-11 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.99] transition-all"
+                          onClick={() => concluirCurso(curso)}
+                          className="w-full sm:w-auto h-10 px-5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition"
                         >
-                          Marcar como concluído
+                          Marcar como Concluído
                         </button>
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </Card>
         </div>
       </div>
     </PageShell>
   );
 }
-
-export default CursosPage;

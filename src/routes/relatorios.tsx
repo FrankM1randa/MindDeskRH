@@ -24,6 +24,10 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  ArrowLeft,
+  TrendingUp,
+  TrendingDown,
+  User,
 } from "lucide-react";
 
 import {
@@ -34,8 +38,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   Cell,
+  LineChart,
+  Line,
+  ReferenceLine,
 } from "recharts";
 
 import relatorioIllus from "@/assets/illus-relatorios.png";
@@ -91,6 +97,28 @@ function daysAgo(days: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function isWeekend(dateStr: string) {
+  const d = new Date(dateStr + "T12:00:00");
+  return d.getDay() === 0 || d.getDay() === 6;
+}
+
+function getWeekdaysBetween(start: string, end: string): string[] {
+  const days: string[] = [];
+  const cur = new Date(start + "T12:00:00");
+  const fim = new Date(end + "T12:00:00");
+  while (cur <= fim) {
+    const iso = cur.toISOString().split("T")[0];
+    if (!isWeekend(iso)) days.push(iso);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
+function formatDateBR(dateStr?: string) {
+  if (!dateStr) return "-";
+  return dateStr.split("-").reverse().join("/");
+}
+
 function Loading() {
   return (
     <div className="flex items-center justify-center py-16">
@@ -112,84 +140,492 @@ function EmptyState() {
   );
 }
 
-function ChartFaltas({ data }: any) {
-  const chartData = data.map((item: any) => ({
-    name: item.nome?.split(" ")[0],
-    faltas: item.total_faltas,
-  }));
+// ─── FALTAS ──────────────────────────────────────────────────────────────────
+// Lógica front: considera falta quando o funcionário tem < 2 registros no dia útil
+function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string }) {
+  const diasUteis = getWeekdaysBetween(from, to);
 
-  return (
-    <div className="w-full h-[300px] -ml-4 pr-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.15} />
-          <XAxis dataKey="name" tick={{ fontSize: 11, fill: isDark ? "#a1a1aa" : "#71717a" }} angle={-45} textAnchor="end" height={55} />
-          <YAxis tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }} allowDecimals={false} />
-          <Tooltip contentStyle={{ backgroundColor: isDark ? "#1f2937" : "#ffffff", borderColor: isDark ? "#374151" : "#e5e7eb", color: isDark ? "#f3f4f6" : "#1f2937", borderRadius: "12px" }} itemStyle={{ color: isDark ? "#f3f4f6" : "#1f2937" }} labelStyle={{ color: isDark ? "#9ca3af" : "#4b5563" }} />
-          <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12, color: isDark ? "#e4e4e7" : "#3f3f46" }} />
-          <Bar dataKey="faltas" fill="#ef4444" radius={[8, 8, 0, 0]} name="Faltas" />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-function ChartAtrasos({ data }: any) {
-  const grouped: Record<string, number> = {};
+  // Agrupa registros por usuario_id + dia
+  const registrosPorUsuarioDia: Record<string, Record<string, number>> = {};
   data.forEach((item: any) => {
-    grouped[item.nome] = (grouped[item.nome] || 0) + item.minutos_atraso;
+    const uid = item.usuario_id;
+    if (!registrosPorUsuarioDia[uid]) registrosPorUsuarioDia[uid] = {};
+    (item.dias_falta || []).forEach((dia: string) => {
+      registrosPorUsuarioDia[uid][dia] = (registrosPorUsuarioDia[uid][dia] || 0) + 1;
+    });
   });
-  const chartData = Object.entries(grouped).map(([name, minutos]) => ({
-    name: name.split(" ")[0],
-    minutos,
-  }));
+
+  // Recalcula faltas: dia útil com < 2 registros = falta
+  const chartData = data.map((item: any) => {
+    const uid = item.usuario_id;
+    const faltasRecalc = diasUteis.filter((dia) => {
+      const regs = registrosPorUsuarioDia[uid]?.[dia] ?? 0;
+      return regs < 2;
+    });
+    return {
+      name: (item.nome || "").split(" ")[0],
+      nomeCompleto: item.nome,
+      cargo: item.cargo,
+      faltas: faltasRecalc.length,
+      diasFalta: faltasRecalc,
+    };
+  }).filter((i) => i.faltas > 0);
+
+  if (!chartData.length) return <EmptyState />;
+
+  const total = chartData.reduce((s, i) => s + i.faltas, 0);
+  const pior = chartData.reduce((a, b) => (b.faltas > a.faltas ? b : a), chartData[0]);
 
   return (
-    <div className="w-full h-[300px] -ml-5 pr-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartData} layout="vertical">
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} strokeOpacity={0.15} />
-          <XAxis type="number" tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }} />
-          <YAxis type="category" dataKey="name" width={55} tick={{ fontSize: 11, fill: isDark ? "#a1a1aa" : "#71717a" }} />
-          <Tooltip contentStyle={{ backgroundColor: isDark ? "#1f2937" : "#ffffff", borderColor: isDark ? "#374151" : "#e5e7eb", color: isDark ? "#f3f4f6" : "#1f2937", borderRadius: "12px" }} itemStyle={{ color: isDark ? "#f3f4f6" : "#1f2937" }} labelStyle={{ color: isDark ? "#9ca3af" : "#4b5563" }} />
-          <Bar dataKey="minutos" fill="#f97316" radius={[0, 8, 8, 0]} name="Minutos" />
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="space-y-5">
+      {/* Resumo */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
+          <div className="text-xs text-zinc-500 dark:text-white/50">Funcionários</div>
+          <div className="text-2xl font-bold mt-1 text-zinc-900 dark:text-white">{chartData.length}</div>
+        </div>
+        <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
+          <div className="text-xs text-zinc-500 dark:text-white/50">Total de faltas</div>
+          <div className="text-2xl font-bold mt-1 text-red-600">{total}</div>
+        </div>
+        <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
+          <div className="text-xs text-zinc-500 dark:text-white/50">Dias úteis</div>
+          <div className="text-2xl font-bold mt-1 text-zinc-900 dark:text-white">{diasUteis.length}</div>
+        </div>
+      </div>
+
+      {/* Aviso metodologia */}
+      <div className="rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 p-3 text-xs text-blue-700 dark:text-blue-300">
+        Falta = dia útil com menos de 2 registros de ponto (entrada + saída). Finais de semana ignorados.
+      </div>
+
+      {/* Gráfico */}
+      <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 sm:p-5 shadow-sm">
+        <div className="w-full h-[280px] -ml-2 pr-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} barCategoryGap="30%">
+              <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.12} />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }}
+                allowDecimals={false}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: isDark ? "#1f2937" : "#ffffff",
+                  borderColor: isDark ? "#374151" : "#e5e7eb",
+                  borderRadius: "14px",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+                }}
+                formatter={(value: any, _: any, props: any) => [
+                  `${value} falta${value !== 1 ? "s" : ""}`,
+                  props.payload.nomeCompleto,
+                ]}
+                labelFormatter={() => ""}
+              />
+              <Bar dataKey="faltas" radius={[10, 10, 0, 0]} name="Faltas">
+                {chartData.map((entry, index) => (
+                  <Cell
+                    key={index}
+                    fill={
+                      entry.faltas >= 5
+                        ? "#ef4444"
+                        : entry.faltas >= 3
+                        ? "#f97316"
+                        : "#fbbf24"
+                    }
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Ranking */}
+      <div className="space-y-2">
+        {chartData
+          .sort((a, b) => b.faltas - a.faltas)
+          .map((item, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-4 rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4"
+            >
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${
+                  i === 0
+                    ? "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400"
+                    : "bg-zinc-100 text-zinc-500 dark:bg-white/[0.06] dark:text-white/50"
+                }`}
+              >
+                {i + 1}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-zinc-900 dark:text-white text-sm truncate">
+                  {item.nomeCompleto}
+                </p>
+                <p className="text-xs text-zinc-500 dark:text-white/40">{item.cargo}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <span
+                  className={`text-lg font-bold ${
+                    item.faltas >= 5
+                      ? "text-red-600"
+                      : item.faltas >= 3
+                      ? "text-orange-500"
+                      : "text-yellow-500"
+                  }`}
+                >
+                  {item.faltas}
+                </span>
+                <span className="text-xs text-zinc-400 dark:text-white/30 ml-1">
+                  dia{item.faltas !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+          ))}
+      </div>
     </div>
   );
 }
 
-function ChartHoras({ data }: any) {
-  const chartData = data.map((item: any) => ({
-    nome: item.nome?.split(" ")[0],
-    saldo: Number(((item.saldo_minutos || 0) / 60).toFixed(1)),
+// ─── ATRASOS ─────────────────────────────────────────────────────────────────
+// Botões de funcionários → clica → gráfico linha (eixo Y = minutos, eixo X = data)
+function ChartAtrasos({ data }: { data: any[] }) {
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+
+  // Agrupa por funcionário
+  const porFuncionario: Record<string, { nome: string; cargo: string; registros: any[] }> = {};
+  data.forEach((item: any) => {
+    const uid = item.usuario_id;
+    if (!porFuncionario[uid]) {
+      porFuncionario[uid] = {
+        nome: item.nome || "—",
+        cargo: item.cargo || "Funcionário",
+        registros: [],
+      };
+    }
+    porFuncionario[uid].registros.push(item);
+  });
+
+  const funcionarios = Object.entries(porFuncionario).map(([uid, val]) => ({
+    uid,
+    ...val,
+    totalMinutos: val.registros.reduce((s, r) => s + (r.minutos_atraso || 0), 0),
+    qtd: val.registros.length,
   }));
 
+  const selected = selectedUser ? porFuncionario[selectedUser] : null;
+
+  const lineData = selected
+    ? selected.registros
+        .sort((a, b) => (a.data > b.data ? 1 : -1))
+        .map((r) => ({
+          data: formatDateBR(r.data),
+          minutos: r.minutos_atraso || 0,
+          horario: r.horario_entrada,
+        }))
+    : [];
+
+  const totalMinutos = funcionarios.reduce((s, f) => s + f.totalMinutos, 0);
+
   return (
-    <div className="w-full h-[300px] -ml-4 pr-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.15} />
-          <XAxis dataKey="nome" tick={{ fontSize: 11, fill: isDark ? "#a1a1aa" : "#71717a" }} angle={-45} textAnchor="end" height={55} />
-          <YAxis tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }} />
-          <Tooltip contentStyle={{ backgroundColor: isDark ? "#1f2937" : "#ffffff", borderColor: isDark ? "#374151" : "#e5e7eb", color: isDark ? "#f3f4f6" : "#1f2937", borderRadius: "12px" }} itemStyle={{ color: isDark ? "#f3f4f6" : "#1f2937" }} labelStyle={{ color: isDark ? "#9ca3af" : "#4b5563" }} />
-          <Bar dataKey="saldo" radius={[8, 8, 0, 0]} name="Saldo">
-            {chartData.map((entry: any, index: number) => (
-              <Cell key={index} fill={entry.saldo >= 0 ? "#22c55e" : "#ef4444"} />
+    <div className="space-y-5">
+      {/* Resumo */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
+          <div className="text-xs text-zinc-500 dark:text-white/50">Funcionários</div>
+          <div className="text-2xl font-bold mt-1 text-zinc-900 dark:text-white">{funcionarios.length}</div>
+        </div>
+        <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
+          <div className="text-xs text-zinc-500 dark:text-white/50">Ocorrências</div>
+          <div className="text-2xl font-bold mt-1 text-orange-500">{data.length}</div>
+        </div>
+        <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
+          <div className="text-xs text-zinc-500 dark:text-white/50">Total min.</div>
+          <div className="text-2xl font-bold mt-1 text-zinc-900 dark:text-white">{totalMinutos}</div>
+        </div>
+      </div>
+
+      {/* Gráfico individual */}
+      {selectedUser && selected ? (
+        <div className="space-y-4">
+          <button
+            onClick={() => setSelectedUser(null)}
+            className="flex items-center gap-2 text-sm text-zinc-500 dark:text-white/50 hover:text-zinc-800 dark:hover:text-white transition-colors"
+          >
+            <ArrowLeft size={14} />
+            Voltar para todos
+          </button>
+
+          <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-2xl bg-orange-100 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold text-sm shrink-0">
+                {selected.nome.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-900 dark:text-white">{selected.nome}</p>
+                <p className="text-xs text-zinc-500 dark:text-white/50">
+                  {selected.registros.length} atraso{selected.registros.length !== 1 ? "s" : ""} no período
+                </p>
+              </div>
+            </div>
+
+            <div className="w-full h-[260px] -ml-3 pr-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={lineData}>
+                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.12} />
+                  <XAxis
+                    dataKey="data"
+                    tick={{ fontSize: 11, fill: isDark ? "#a1a1aa" : "#71717a" }}
+                    axisLine={false}
+                    tickLine={false}
+                    angle={-35}
+                    textAnchor="end"
+                    height={48}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }}
+                    axisLine={false}
+                    tickLine={false}
+                    label={{
+                      value: "minutos",
+                      angle: -90,
+                      position: "insideLeft",
+                      offset: 10,
+                      style: { fontSize: 11, fill: isDark ? "#71717a" : "#a1a1aa" },
+                    }}
+                  />
+                  <ReferenceLine
+                    y={5}
+                    stroke="#f97316"
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.5}
+                    label={{ value: "5 min", fontSize: 10, fill: "#f97316", position: "right" }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: isDark ? "#1f2937" : "#ffffff",
+                      borderColor: isDark ? "#374151" : "#e5e7eb",
+                      borderRadius: "14px",
+                    }}
+                    formatter={(val: any, _: any, props: any) => [
+                      `${val} min (entrada: ${props.payload.horario})`,
+                      "Atraso",
+                    ]}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="minutos"
+                    stroke="#f97316"
+                    strokeWidth={2.5}
+                    dot={{ r: 5, fill: "#f97316", strokeWidth: 0 }}
+                    activeDot={{ r: 7 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Lista de funcionários como botões */
+        <div className="space-y-2">
+          <p className="text-xs text-zinc-400 dark:text-white/30 uppercase tracking-wider font-medium px-1">
+            Selecione um funcionário para ver o histórico
+          </p>
+          {funcionarios
+            .sort((a, b) => b.totalMinutos - a.totalMinutos)
+            .map((f) => (
+              <button
+                key={f.uid}
+                onClick={() => setSelectedUser(f.uid)}
+                className="w-full flex items-center gap-4 rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 text-left hover:border-primary/30 hover:bg-primary/[0.02] dark:hover:bg-primary/[0.05] transition-all group"
+              >
+                <div className="w-10 h-10 rounded-2xl bg-orange-100 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold text-sm shrink-0">
+                  {f.nome.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-zinc-900 dark:text-white text-sm truncate">{f.nome}</p>
+                  <p className="text-xs text-zinc-500 dark:text-white/40">{f.cargo}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-bold text-orange-500">
+                    {f.totalMinutos} min
+                  </p>
+                  <p className="text-xs text-zinc-400 dark:text-white/30">
+                    {f.qtd} ocorrência{f.qtd !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <ChevronRight
+                  size={16}
+                  className="text-zinc-300 dark:text-white/20 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0"
+                />
+              </button>
             ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
 
-function TabelaFerias({ data }: any) {
-  function formatarData(data?: string) {
-    if (!data) return "-";
-    return data.split("-").reverse().join("/");
+// ─── BANCO DE HORAS ───────────────────────────────────────────────────────────
+// Mostra apenas saldo (+/-) por funcionário
+function ChartHoras({ data }: { data: any[] }) {
+  // Agrupa saldo por funcionário
+  const porFuncionario: Record<string, { nome: string; cargo: string; saldoMinutos: number }> = {};
+  data.forEach((item: any) => {
+    const uid = item.usuario_id;
+    if (!porFuncionario[uid]) {
+      porFuncionario[uid] = {
+        nome: item.nome || "—",
+        cargo: item.cargo || "Funcionário",
+        saldoMinutos: 0,
+      };
+    }
+    porFuncionario[uid].saldoMinutos += item.saldo_minutos || 0;
+  });
+
+  const funcionarios = Object.values(porFuncionario).sort(
+    (a, b) => a.saldoMinutos - b.saldoMinutos
+  );
+
+  const positivos = funcionarios.filter((f) => f.saldoMinutos >= 0);
+  const negativos = funcionarios.filter((f) => f.saldoMinutos < 0);
+
+  function formatSaldo(minutos: number) {
+    const abs = Math.abs(minutos);
+    const h = Math.floor(abs / 60);
+    const m = abs % 60;
+    const prefix = minutos >= 0 ? "+" : "-";
+    return `${prefix}${h}h${String(m).padStart(2, "0")}m`;
   }
 
+  const chartData = funcionarios.map((f) => ({
+    nome: f.nome.split(" ")[0],
+    nomeCompleto: f.nome,
+    cargo: f.cargo,
+    saldo: Number((f.saldoMinutos / 60).toFixed(2)),
+    saldoMinutos: f.saldoMinutos,
+  }));
+
+  return (
+    <div className="space-y-5">
+      {/* Resumo */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-green-200 dark:border-green-900/40 bg-green-50 dark:bg-green-950/20 p-4 flex items-center gap-3">
+          <TrendingUp size={20} className="text-green-600 dark:text-green-400 shrink-0" />
+          <div>
+            <div className="text-xs text-green-700 dark:text-green-400 font-medium">Crédito</div>
+            <div className="text-xl font-bold text-green-700 dark:text-green-400 mt-0.5">{positivos.length} func.</div>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 p-4 flex items-center gap-3">
+          <TrendingDown size={20} className="text-red-600 dark:text-red-400 shrink-0" />
+          <div>
+            <div className="text-xs text-red-700 dark:text-red-400 font-medium">Débito</div>
+            <div className="text-xl font-bold text-red-700 dark:text-red-400 mt-0.5">{negativos.length} func.</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Gráfico saldo */}
+      <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 sm:p-5 shadow-sm">
+        <p className="text-xs text-zinc-400 dark:text-white/30 uppercase tracking-wider font-medium mb-4">
+          Saldo em horas
+        </p>
+        <div className="w-full h-[260px] -ml-2 pr-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} barCategoryGap="30%">
+              <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.12} />
+              <XAxis
+                dataKey="nome"
+                tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }}
+                axisLine={false}
+                tickLine={false}
+                label={{
+                  value: "horas",
+                  angle: -90,
+                  position: "insideLeft",
+                  offset: 10,
+                  style: { fontSize: 11, fill: isDark ? "#71717a" : "#a1a1aa" },
+                }}
+              />
+              <ReferenceLine y={0} stroke={isDark ? "#374151" : "#e5e7eb"} strokeWidth={1.5} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: isDark ? "#1f2937" : "#ffffff",
+                  borderColor: isDark ? "#374151" : "#e5e7eb",
+                  borderRadius: "14px",
+                }}
+                formatter={(val: any, _: any, props: any) => [
+                  formatSaldo(props.payload.saldoMinutos),
+                  props.payload.nomeCompleto,
+                ]}
+                labelFormatter={() => ""}
+              />
+              <Bar dataKey="saldo" radius={[8, 8, 0, 0]} name="Saldo">
+                {chartData.map((entry, index) => (
+                  <Cell key={index} fill={entry.saldo >= 0 ? "#22c55e" : "#ef4444"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Cards de saldo por funcionário */}
+      <div className="space-y-2">
+        {funcionarios
+          .sort((a, b) => a.saldoMinutos - b.saldoMinutos)
+          .map((f, i) => {
+            const positivo = f.saldoMinutos >= 0;
+            return (
+              <div
+                key={i}
+                className="flex items-center gap-4 rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4"
+              >
+                <div
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                    positivo
+                      ? "bg-green-100 dark:bg-green-950/30 text-green-600 dark:text-green-400"
+                      : "bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {positivo ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-zinc-900 dark:text-white text-sm truncate">{f.nome}</p>
+                  <p className="text-xs text-zinc-500 dark:text-white/40">{f.cargo}</p>
+                </div>
+                <div
+                  className={`text-lg font-bold shrink-0 ${
+                    positivo ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {formatSaldo(f.saldoMinutos)}
+                </div>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
+
+// ─── FÉRIAS ───────────────────────────────────────────────────────────────────
+function TabelaFerias({ data }: any) {
   function normalizarTexto(texto: string) {
     return texto?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") || "";
   }
@@ -214,37 +650,56 @@ function TabelaFerias({ data }: any) {
     }
   }
 
-  const dadosOrdenados = [...data];
+  // Retorna classes de cor apenas para o aviso (borda + fundo + texto)
+  function corAviso(situacao: string) {
+    const sit = normalizarTexto(situacao);
+    switch (sit) {
+      case "muito atrasada":
+      case "critica":
+        return "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300";
+      case "atrasada":
+      case "alta":
+        return "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900/40 text-orange-700 dark:text-orange-300";
+      case "disponivel":
+      case "media":
+        return "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900/40 text-yellow-700 dark:text-yellow-300";
+      case "em dia":
+      case "baixa":
+        return "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900/40 text-green-700 dark:text-green-300";
+      default:
+        return "bg-zinc-100 dark:bg-white/[0.04] border-black/5 dark:border-white/10 text-zinc-700 dark:text-white/70";
+    }
+  }
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Funcionários</div>
-          <div className="text-2xl font-bold mt-1">{dadosOrdenados.length}</div>
+          <div className="text-2xl font-bold mt-1">{data.length}</div>
         </div>
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Críticas</div>
           <div className="text-2xl font-bold text-red-600 mt-1">
-            {dadosOrdenados.filter((i: any) => { const sit = normalizarTexto(i.situacao || i.prioridade); return sit === "muito atrasada" || sit === "critica"; }).length}
+            {data.filter((i: any) => { const sit = normalizarTexto(i.situacao || i.prioridade); return sit === "muito atrasada" || sit === "critica"; }).length}
           </div>
         </div>
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Atenção</div>
           <div className="text-2xl font-bold text-orange-600 mt-1">
-            {dadosOrdenados.filter((i: any) => { const sit = normalizarTexto(i.situacao || i.prioridade); return sit === "atrasada" || sit === "alta"; }).length}
+            {data.filter((i: any) => { const sit = normalizarTexto(i.situacao || i.prioridade); return sit === "atrasada" || sit === "alta"; }).length}
           </div>
         </div>
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Disponíveis</div>
           <div className="text-2xl font-bold text-green-600 mt-1">
-            {dadosOrdenados.filter((i: any) => { const sit = normalizarTexto(i.situacao || i.prioridade); return sit === "disponivel" || sit === "media" || sit === "em dia"; }).length}
+            {data.filter((i: any) => { const sit = normalizarTexto(i.situacao || i.prioridade); return sit === "disponivel" || sit === "media" || sit === "em dia"; }).length}
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {dadosOrdenados.map((item: any, index: number) => (
+        {data.map((item: any, index: number) => (
           <div key={index} className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -258,11 +713,11 @@ function TabelaFerias({ data }: any) {
             <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
               <div>
                 <div className="text-xs text-zinc-500 dark:text-white/50">Últimas férias</div>
-                <div className="font-medium mt-1 text-zinc-900 dark:text-white">{formatarData(item.data_ultima_ferias)}</div>
+                <div className="font-medium mt-1 text-zinc-900 dark:text-white">{formatDateBR(item.data_ultima_ferias)}</div>
               </div>
               <div>
                 <div className="text-xs text-zinc-500 dark:text-white/50">Vencimento</div>
-                <div className="font-medium mt-1 text-zinc-900 dark:text-white">{formatarData(item.data_vencimento_ferias)}</div>
+                <div className="font-medium mt-1 text-zinc-900 dark:text-white">{formatDateBR(item.data_vencimento_ferias)}</div>
               </div>
               <div className="col-span-2">
                 <div className="text-xs text-zinc-500 dark:text-white/50">Períodos pendentes</div>
@@ -272,7 +727,7 @@ function TabelaFerias({ data }: any) {
               </div>
             </div>
             {item.aviso && (
-              <div className="mt-5 rounded-2xl bg-zinc-100 dark:bg-white/[0.04] border border-black/5 dark:border-white/10 p-4 text-sm text-zinc-700 dark:text-white/70">
+              <div className={`mt-5 rounded-2xl border p-4 text-sm font-medium ${corAviso(item.situacao || item.prioridade)}`}>
                 {item.aviso}
               </div>
             )}
@@ -283,33 +738,25 @@ function TabelaFerias({ data }: any) {
   );
 }
 
-// ─── NOVO: Componente de Afastamentos com abas e busca ───────────────────────
-
+// ─── AFASTAMENTOS ─────────────────────────────────────────────────────────────
 type AbaAfastamento = "pendente" | "aprovado" | "recusado";
 
 function TabelaAfastamentos({ data, onUpdateStatus }: { data: any[]; onUpdateStatus: (id: string, status: string) => void }) {
   const [aba, setAba] = useState<AbaAfastamento>("pendente");
   const [busca, setBusca] = useState("");
 
+  // Helper: pega o nome independente de onde venha no objeto
+  function nomeFuncionario(item: any): string {
+    return item.usuarios?.nome || item.nome || item.usuario?.nome || "—";
+  }
+  function cargoFuncionario(item: any): string {
+    return item.usuarios?.cargo || item.cargo || item.usuario?.cargo || "Funcionário";
+  }
+
   const abas: { id: AbaAfastamento; label: string; icon: React.ReactNode; cor: string }[] = [
-    {
-      id: "pendente",
-      label: "Pendentes",
-      icon: <Clock size={14} />,
-      cor: "text-yellow-600 dark:text-yellow-400",
-    },
-    {
-      id: "aprovado",
-      label: "Aceitos",
-      icon: <CheckCircle2 size={14} />,
-      cor: "text-green-600 dark:text-green-400",
-    },
-    {
-      id: "recusado",
-      label: "Recusados",
-      icon: <XCircle size={14} />,
-      cor: "text-red-600 dark:text-red-400",
-    },
+    { id: "pendente", label: "Pendentes", icon: <Clock size={14} />, cor: "text-yellow-600 dark:text-yellow-400" },
+    { id: "aprovado", label: "Aceitos", icon: <CheckCircle2 size={14} />, cor: "text-green-600 dark:text-green-400" },
+    { id: "recusado", label: "Recusados", icon: <XCircle size={14} />, cor: "text-red-600 dark:text-red-400" },
   ];
 
   const counts = {
@@ -319,31 +766,20 @@ function TabelaAfastamentos({ data, onUpdateStatus }: { data: any[]; onUpdateSta
   };
 
   const filtrados = data.filter((item) => {
-    const nome = (item.usuarios?.nome || item.nome || "").toLowerCase();
-    const matchBusca = nome.includes(busca.toLowerCase());
-    const matchAba = item.status === aba;
-    return matchBusca && matchAba;
+    const nome = nomeFuncionario(item).toLowerCase();
+    return nome.includes(busca.toLowerCase()) && item.status === aba;
   });
-
-  function formatarData(data?: string) {
-    if (!data) return "-";
-    return data.split("-").reverse().join("/");
-  }
 
   function badgeAba(status: string) {
     switch (status) {
-      case "aprovado":
-        return "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400";
-      case "recusado":
-        return "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400";
-      default:
-        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-400";
+      case "aprovado": return "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400";
+      case "recusado": return "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400";
+      default: return "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-400";
     }
   }
 
   return (
     <div className="space-y-5">
-      {/* Contador de cards por status */}
       <div className="grid grid-cols-3 gap-3">
         {abas.map((a) => (
           <button
@@ -359,14 +795,11 @@ function TabelaAfastamentos({ data, onUpdateStatus }: { data: any[]; onUpdateSta
               {a.icon}
               {a.label}
             </div>
-            <div className="text-2xl font-bold text-zinc-900 dark:text-white">
-              {counts[a.id]}
-            </div>
+            <div className="text-2xl font-bold text-zinc-900 dark:text-white">{counts[a.id]}</div>
           </button>
         ))}
       </div>
 
-      {/* Campo de busca */}
       <div className="relative">
         <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-white/30" />
         <input
@@ -377,16 +810,12 @@ function TabelaAfastamentos({ data, onUpdateStatus }: { data: any[]; onUpdateSta
           className="w-full h-12 pl-10 pr-4 rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] text-sm outline-none focus:border-primary/40 transition-colors placeholder:text-zinc-400 dark:placeholder:text-white/30"
         />
         {busca && (
-          <button
-            onClick={() => setBusca("")}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-          >
+          <button onClick={() => setBusca("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
             <X size={14} />
           </button>
         )}
       </div>
 
-      {/* Abas */}
       <div className="flex gap-2 border-b border-black/5 dark:border-white/10">
         {abas.map((a) => (
           <button
@@ -401,13 +830,7 @@ function TabelaAfastamentos({ data, onUpdateStatus }: { data: any[]; onUpdateSta
             {a.icon}
             {a.label}
             {counts[a.id] > 0 && (
-              <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                  aba === a.id
-                    ? "bg-primary/15 text-primary"
-                    : "bg-zinc-100 dark:bg-white/10 text-zinc-500 dark:text-white/50"
-                }`}
-              >
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${aba === a.id ? "bg-primary/15 text-primary" : "bg-zinc-100 dark:bg-white/10 text-zinc-500 dark:text-white/50"}`}>
                 {counts[a.id]}
               </span>
             )}
@@ -415,7 +838,6 @@ function TabelaAfastamentos({ data, onUpdateStatus }: { data: any[]; onUpdateSta
         ))}
       </div>
 
-      {/* Lista de atestados */}
       {filtrados.length === 0 ? (
         <div className="py-12 text-center">
           <div className="w-14 h-14 mx-auto mb-4 rounded-3xl bg-zinc-100 dark:bg-white/[0.05] flex items-center justify-center">
@@ -428,67 +850,47 @@ function TabelaAfastamentos({ data, onUpdateStatus }: { data: any[]; onUpdateSta
       ) : (
         <div className="space-y-3">
           {filtrados.map((item: any) => (
-            <div
-              key={item.id}
-              className="rounded-[24px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm"
-            >
+            <div key={item.id} className="rounded-[24px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm">
               <div className="flex items-start justify-between gap-4 flex-wrap">
-                {/* Info do funcionário */}
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                    {(item.usuarios?.nome || item.nome || "?").charAt(0).toUpperCase()}
+                    {nomeFuncionario(item).charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-zinc-900 dark:text-white truncate">
-                      {item.usuarios?.nome || item.nome || "—"}
+                      {nomeFuncionario(item)}
                     </p>
                     <p className="text-xs text-zinc-500 dark:text-white/50">
-                      {item.usuarios?.cargo || item.cargo || "Funcionário"}
+                      {cargoFuncionario(item)}
                     </p>
                   </div>
                 </div>
-
-                {/* Badge de status */}
                 <span className={`text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shrink-0 ${badgeAba(item.status)}`}>
                   {item.status || "pendente"}
                 </span>
               </div>
 
-              {/* Detalhes */}
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <div className="text-xs text-zinc-500 dark:text-white/50">Motivo / CID</div>
-                  <div className="font-medium mt-1 text-zinc-900 dark:text-white">
-                    {item.motivo_cid || item.motivo || "Atestado"}
-                  </div>
+                  <div className="font-medium mt-1 text-zinc-900 dark:text-white">{item.motivo_cid || item.motivo || "Atestado"}</div>
                 </div>
                 <div>
                   <div className="text-xs text-zinc-500 dark:text-white/50">Data de emissão</div>
-                  <div className="font-medium mt-1 text-zinc-900 dark:text-white">
-                    {formatarData(item.data_emissao)}
-                  </div>
+                  <div className="font-medium mt-1 text-zinc-900 dark:text-white">{formatDateBR(item.data_emissao)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-zinc-500 dark:text-white/50">Dias afastado</div>
-                  <div className="font-medium mt-1 text-zinc-900 dark:text-white">
-                    {item.dias_afastamento ?? "-"}
-                  </div>
+                  <div className="font-medium mt-1 text-zinc-900 dark:text-white">{item.dias_afastamento ?? "-"}</div>
                 </div>
               </div>
 
-              {/* Link do arquivo */}
               {item.url_arquivo && (
-                <a
-                  href={item.url_arquivo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline"
-                >
+                <a href={item.url_arquivo} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline">
                   Ver atestado →
                 </a>
               )}
 
-              {/* Ações para pendentes */}
               {item.status === "pendente" && (
                 <div className="mt-4 flex gap-2">
                   <button
@@ -513,8 +915,7 @@ function TabelaAfastamentos({ data, onUpdateStatus }: { data: any[]; onUpdateSta
   );
 }
 
-// ─── Página principal ────────────────────────────────────────────────────────
-
+// ─── Página principal ─────────────────────────────────────────────────────────
 function RelatoriosPage() {
   const navigate = useNavigate();
 
@@ -525,36 +926,48 @@ function RelatoriosPage() {
   const [dados, setDados] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!getToken()) {
-      navigate({ to: "/login" });
-    }
+    if (!getToken()) navigate({ to: "/login" });
   }, [navigate]);
 
   async function carregarRelatorio(tipo: string) {
     try {
       setLoading(true);
 
-      // Afastamentos: busca todos os atestados + pendentes em paralelo.
-      // /atestados retorna sem join (sem nome), mas /atestados/pendentes
-      // tem join com usuarios(nome,cargo). Mesclamos para ter nome em todos.
       if (tipo === "afastamentos") {
-        const [todosRes, pendentesRes] = await Promise.all([
+        // Busca atestados + pendentes (com join de nome) + lista de usuários em paralelo
+        const [todosRes, pendentesRes, usuariosRes] = await Promise.all([
           fetch(`${API}/atestados?tenant_id=${TENANT_ID}`, { headers: authHeaders() }),
           fetch(`${API}/atestados/pendentes`, { headers: authHeaders() }),
+          fetch(`${API}/usuarios?tenant_id=${TENANT_ID}`, { headers: authHeaders() }),
         ]);
 
-        const todos = todosRes.ok ? await todosRes.json() : [];
-        const pendentes = pendentesRes.ok ? await pendentesRes.json() : [];
+        const todos: any[] = todosRes.ok ? await todosRes.json() : [];
+        const pendentes: any[] = pendentesRes.ok ? await pendentesRes.json() : [];
+        const usuarios: any[] = usuariosRes.ok ? await usuariosRes.json() : [];
 
-        // Monta mapa de id → dados do usuario vindos dos pendentes (que têm o join)
+        // Monta mapa usuario_id → { nome, cargo, email }
         const nomeMapa: Record<string, any> = {};
+
+        // Fonte 1: /usuarios — cobre todos independente de status do atestado
+        (Array.isArray(usuarios) ? usuarios : []).forEach((u: any) => {
+          if (u.id) nomeMapa[u.id] = { nome: u.nome, cargo: u.cargo, email: u.email };
+        });
+
+        // Fonte 2: pendentes com join (fallback caso /usuarios não esteja disponível)
         (Array.isArray(pendentes) ? pendentes : []).forEach((p: any) => {
-          if (p.usuario_id && p.usuarios?.nome) {
+          if (p.usuario_id && p.usuarios?.nome && !nomeMapa[p.usuario_id]) {
             nomeMapa[p.usuario_id] = p.usuarios;
           }
         });
 
-        // Mescla: usa o nome do mapa quando /atestados não trouxe
+        // Fonte 3: qualquer item de todos que já venha com join
+        (Array.isArray(todos) ? todos : []).forEach((p: any) => {
+          if (p.usuario_id && p.usuarios?.nome && !nomeMapa[p.usuario_id]) {
+            nomeMapa[p.usuario_id] = p.usuarios;
+          }
+        });
+
+        // Injeta dados do usuário em cada atestado
         const resultado = (Array.isArray(todos) ? todos : []).map((item: any) => ({
           ...item,
           usuarios: {
@@ -595,7 +1008,6 @@ function RelatoriosPage() {
     }
   }
 
-  // Atualiza o status de um atestado e reflete localmente sem re-fetch
   async function handleUpdateStatus(id: string, status: string) {
     try {
       const response = await fetch(`${API}/atestados/${id}/status`, {
@@ -609,7 +1021,6 @@ function RelatoriosPage() {
         throw new Error(json.error || "Erro ao atualizar status");
       }
 
-      // Atualiza localmente para evitar re-fetch desnecessário
       setDados((prev) =>
         prev.map((item) => (item.id === id ? { ...item, status } : item))
       );
@@ -620,9 +1031,7 @@ function RelatoriosPage() {
   }
 
   useEffect(() => {
-    if (open) {
-      carregarRelatorio(open);
-    }
+    if (open) carregarRelatorio(open);
   }, [open, from, to]);
 
   const report = useMemo(() => REPORTS.find((r) => r.id === open), [open]);
@@ -633,25 +1042,11 @@ function RelatoriosPage() {
 
     switch (open) {
       case "faltas":
-        return (
-          <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 sm:p-5 shadow-sm">
-            <ChartFaltas data={dados} />
-          </div>
-        );
+        return <ChartFaltas data={dados} from={from} to={to} />;
       case "atrasos":
-        return (
-          <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 sm:p-5 shadow-sm">
-            <ChartAtrasos data={dados} />
-          </div>
-        );
+        return <ChartAtrasos data={dados} />;
       case "horas":
-        return (
-          <div className="space-y-6">
-            <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 sm:p-5 shadow-sm">
-              <ChartHoras data={dados} />
-            </div>
-          </div>
-        );
+        return <ChartHoras data={dados} />;
       case "ferias":
         return <TabelaFerias data={dados} />;
       case "afastamentos":
