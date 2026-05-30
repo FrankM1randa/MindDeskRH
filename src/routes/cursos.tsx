@@ -30,7 +30,7 @@ type UsuarioAtribuido = {
   nome: string;
   cargo: string;
   concluido: boolean;
-  concluido_em?: string;
+  concluido_em?: string | null;
 };
 
 type CursoAgrupado = {
@@ -40,6 +40,7 @@ type CursoAgrupado = {
   descricao?: string;
   prazo_dias?: string;
   created_at?: string;
+  concluido?: boolean;
   usuarios_atribuidos: UsuarioAtribuido[];
 };
 
@@ -52,27 +53,31 @@ type Funcionario = {
 type AlertState = { msg: string; type: "error" | "success" };
 
 function DocumentosPage() {
-  const user = useRequireAuth(); 
-  
-  // Verificamos se o usuário logado é admin/gerente
-  const isAdmin = user?.cargo === "admin" || user?.role === "admin" || user?.cargo === "gerente";
-
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [loadingPermissao, setLoadingPermissao] = useState(true);
   const [tab, setTab] = useState<"docs" | "cursos">("docs");
-  const [alert, setAlert] = useState<AlertState>({
-    msg: "",
-    type: "success",
-  });
+  const [alert, setAlert] = useState<AlertState>({ msg: "", type: "success" });
 
-  const showAlert = (
-    msg: string,
-    type: AlertState["type"] = "success"
-  ) => {
+  useEffect(() => {
+    // Puxa a permissão REAL do backend (Segurança máxima)
+    fetch(`${API}/cursos/verificar-acesso`, { headers: authHeaders() })
+      .then(res => res.json())
+      .then(data => {
+        setIsAdmin(!!data.isAdmin);
+        setLoadingPermissao(false);
+      })
+      .catch(() => {
+        setIsAdmin(false);
+        setLoadingPermissao(false);
+      });
+  }, []);
+
+  const showAlert = (msg: string, type: AlertState["type"] = "success") => {
     setAlert({ msg, type });
-
-    setTimeout(() => {
-      setAlert({ msg: "", type: "success" });
-    }, 4000);
+    setTimeout(() => setAlert({ msg: "", type: "success" }), 4000);
   };
+
+  if (loadingPermissao) return <PageShell><div className="p-10 text-center">Carregando permissões...</div></PageShell>;
 
   return (
     <PageShell>
@@ -84,96 +89,39 @@ function DocumentosPage() {
           </div>
 
           <Card className="overflow-hidden border border-border/60 bg-card/95 backdrop-blur-sm shadow-xl rounded-3xl">
-            {/* Header */}
             <div className="relative overflow-hidden border-b border-border/50">
               <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5" />
-
               <div className="relative p-5 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-5">
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-background border border-border flex items-center justify-center shadow-sm">
-                  <img
-                    src={docsIllus}
-                    alt=""
-                    loading="lazy"
-                    className="w-10 sm:w-14 object-contain"
-                  />
+                  <img src={docsIllus} alt="" loading="lazy" className="w-10 sm:w-14 object-contain" />
                 </div>
-
                 <div className="flex-1">
                   <h1 className="text-xl sm:text-3xl font-bold tracking-tight">
-                    {/* Título dinâmico mais focado para o funcionário */}
                     {isAdmin ? "Documentos & Cursos" : "Meus Cursos"}
                   </h1>
-
                   <p className="text-sm sm:text-base text-muted-foreground mt-1 max-w-2xl">
-                    {isAdmin 
-                      ? "Gerencie arquivos, materiais internos e conteúdos de treinamento da equipe."
-                      : "Acesse os treinamentos disponibilizados para você."}
+                    {isAdmin ? "Gerencie materiais e treinamentos da equipe." : "Acesse os treinamentos disponíveis para você."}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Conteúdo da Página */}
             <div className="p-4 sm:p-6">
-              
-              {/* Só exibe a barra de abas se for ADMIN */}
               {isAdmin && (
                 <div className="flex gap-2 p-1.5 bg-secondary/70 rounded-2xl mb-5 border border-border/50">
-                  <TabBtn
-                    active={tab === "docs"}
-                    onClick={() => setTab("docs")}
-                  >
-                    Documentos
-                  </TabBtn>
-
-                  <TabBtn
-                    active={tab === "cursos"}
-                    onClick={() => setTab("cursos")}
-                  >
-                    Cursos
-                  </TabBtn>
+                  <TabBtn active={tab === "docs"} onClick={() => setTab("docs")}>Documentos</TabBtn>
+                  <TabBtn active={tab === "cursos"} onClick={() => setTab("cursos")}>Cursos</TabBtn>
                 </div>
               )}
 
-              {alert.msg && (
-                <div className="mb-5">
-                  <Alert type={alert.type} msg={alert.msg} />
-                </div>
-              )}
+              {alert.msg && <div className="mb-5"><Alert type={alert.type} msg={alert.msg} /></div>}
 
-              {/* Exibe Documentos SOMENTE se for Admin E a aba Docs estiver ativa */}
-              {isAdmin && tab === "docs" && (
-                <DocsTab showAlert={showAlert} isAdmin={isAdmin} />
-              )}
-
-              {/* Exibe Cursos se a aba estiver ativa OU se NÃO for admin (exibição forçada) */}
-              {(!isAdmin || tab === "cursos") && (
-                <CursosTab showAlert={showAlert} isAdmin={isAdmin} />
-              )}
+              {isAdmin && tab === "docs" && <DocsTab showAlert={showAlert} isAdmin={isAdmin} />}
+              {(!isAdmin || tab === "cursos") && <CursosTab showAlert={showAlert} isAdmin={isAdmin} />}
             </div>
           </Card>
         </div>
       </div>
-
-      <style>{`
-        .md-input {
-          width: 100%;
-          height: 48px;
-          padding: 0 .95rem;
-          border: 1px solid var(--color-border);
-          border-radius: 1rem;
-          background: var(--color-background);
-          color: inherit;
-          font-size: .92rem;
-          transition: .2s ease;
-        }
-
-        .md-input:focus {
-          outline: none;
-          border-color: var(--color-primary);
-          box-shadow: 0 0 0 4px oklch(0.55 0.17 255 / 0.10);
-        }
-      `}</style>
     </PageShell>
   );
 }
@@ -389,12 +337,16 @@ function CursosTab({
         headers: authHeaders(),
       });
       if (!res.ok) throw new Error();
+      
       const data = await res.json();
-
+      
+      // FIX 1: Impede que a tela quebre se o backend não retornar um Array válido
+      const cursosData = Array.isArray(data) ? data : [];
       const agrupados: Record<string, CursoAgrupado> = {};
 
-      data.forEach((c: any) => {
-        const key = c.link;
+      cursosData.forEach((c: any) => {
+        // Fallback para caso o link venha vazio
+        const key = c.link || `sem-link-${c.id}`;
         
         if (!agrupados[key]) {
           agrupados[key] = {
@@ -404,6 +356,7 @@ function CursosTab({
             descricao: c.descricao,
             prazo_dias: c.prazo_dias,
             created_at: c.created_at,
+            concluido: c.status === 'concluido', 
             usuarios_atribuidos: [],
           };
         }
@@ -485,6 +438,11 @@ function CursosTab({
       showAlert("Curso adicionado.", "success");
       setForm({ titulo: "", link: "", descricao: "", prazo_dias: "" });
       setCourseFile(null);
+      
+      // FIX EXTRA UX: Limpa o input file caso esteja no modo PDF
+      const fileInput = document.getElementById('pdf-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = "";
+      
       fetchCursos();
     } catch {
       showAlert("Erro ao cadastrar curso.", "error");
@@ -556,6 +514,22 @@ function CursosTab({
     }
   };
 
+  const handleConcluirCurso = async (cursoId: number) => {
+    try {
+      const res = await fetch(`${API}/cursos/${cursoId}/concluir`, {
+        method: "POST", 
+        headers: authHeaders(),
+      });
+
+      if (!res.ok) throw new Error();
+
+      showAlert("Parabéns! Curso marcado como concluído.", "success");
+      fetchCursos();
+    } catch {
+      showAlert("Erro ao tentar concluir o curso. Tente novamente.", "error");
+    }
+  };
+
   const toggleFuncionarioSelecao = (id: string) => {
     setFuncionariosSelecionados((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
@@ -563,7 +537,7 @@ function CursosTab({
   };
 
   const funcionariosFiltrados = funcionarios.filter((f) =>
-    f.nome.toLowerCase().includes(searchTerm.toLowerCase())
+    f.nome?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -628,6 +602,7 @@ function CursosTab({
             ) : (
               <div className="p-3 border border-border rounded-xl bg-background">
                 <input
+                  id="pdf-upload"
                   type="file"
                   accept=".pdf"
                   onChange={(e) => {
@@ -666,15 +641,20 @@ function CursosTab({
         {!loading &&
           cursos.map((c) => (
             <div key={c.id} className="rounded-3xl border border-border bg-card p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
                 <div>
                   <a
                     href={c.link}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-base sm:text-lg font-bold hover:text-primary transition"
+                    className="text-base sm:text-lg font-bold hover:text-primary transition flex items-center gap-2"
                   >
                     {c.titulo}
+                    {!isAdmin && c.concluido && (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 text-[10px] uppercase tracking-wider font-bold">
+                        Concluído
+                      </span>
+                    )}
                   </a>
 
                   {c.descricao && (
@@ -686,27 +666,49 @@ function CursosTab({
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Limite: {new Date(c.prazo_dias + "T00:00:00").toLocaleDateString("pt-BR")}
+                      {/* FIX 3: Ajuste de fuso horário (+ T12:00:00) para evitar que o limite apareça um dia antes */}
+                      Limite: {new Date(c.prazo_dias + "T12:00:00").toLocaleDateString("pt-BR")}
                     </p>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-center gap-2">
                   {!isAdmin && (
-                    <a
-                      href={c.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="h-10 px-4 rounded-xl bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition flex items-center justify-center"
-                    >
-                      Acessar Curso
-                    </a>
+                    <>
+                      <a
+                        href={c.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full sm:w-auto h-10 px-4 rounded-xl bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition flex items-center justify-center"
+                      >
+                        Acessar Curso
+                      </a>
+
+                      {!c.concluido ? (
+                         <button
+                           onClick={() => handleConcluirCurso(c.id)}
+                           className="w-full sm:w-auto h-10 px-4 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 transition flex items-center justify-center gap-2 shadow-sm"
+                         >
+                           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                           </svg>
+                           Marcar como Concluído
+                         </button>
+                      ) : (
+                         <span className="w-full sm:w-auto h-10 px-4 rounded-xl border border-border bg-secondary/50 text-muted-foreground text-sm font-medium flex items-center justify-center gap-2 cursor-not-allowed">
+                           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                           </svg>
+                           Concluído
+                         </span>
+                      )}
+                    </>
                   )}
 
                   {isAdmin && (
                     <button
                       onClick={() => handleDelete(c)}
-                      className="px-3 h-10 rounded-xl bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/20 transition"
+                      className="w-full sm:w-auto px-3 h-10 rounded-xl bg-destructive/10 text-destructive text-sm font-medium hover:bg-destructive/20 transition"
                     >
                       Excluir
                     </button>
@@ -735,9 +737,10 @@ function CursosTab({
                         >
                           <div className="flex flex-col">
                             <span>{u.nome} <span className="opacity-60">({u.cargo})</span></span>
+                            {/* FIX 2: Blindagem contra data nula para não renderizar 1969 */}
                             {u.concluido && (
                               <span className="text-[10px] text-emerald-600/80 font-semibold">
-                                ✓ Concluído em {new Date(u.concluido_em!).toLocaleDateString("pt-BR")}
+                                ✓ Concluído {u.concluido_em ? `em ${new Date(u.concluido_em).toLocaleDateString("pt-BR")}` : ""}
                               </span>
                             )}
                           </div>
