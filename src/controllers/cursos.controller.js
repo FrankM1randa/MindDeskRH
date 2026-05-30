@@ -165,3 +165,89 @@ exports.deletarCurso = async (req, res) => {
         return res.status(500).json({ error: 'Erro interno.' });
     }
 };
+
+// =========================================
+// Funcionário marca curso como concluído
+// =========================================
+exports.concluirCurso = async (req, res) => {
+    try {
+        const { id } = req.params; // ID do registro na tabela 'cursos'
+        const usuario_id = String(req.user.id).trim();
+        const tenant_id = Number(req.user.tenant_id);
+
+        console.log(`[concluirCurso] Usuário ${usuario_id} solicitando conclusão do curso ID: ${id}`);
+
+        // 1. Busca os dados do curso atribuído para pegar prazo e título
+        const { data: curso, error: fetchError } = await supabase
+            .from('cursos')
+            .select('*')
+            .eq('id', id)
+            .eq('usuario_id', usuario_id)
+            .single();
+
+        if (fetchError || !curso) {
+            console.error(`[concluirCurso] Erro: Curso não encontrado.`);
+            return res.status(404).json({ error: 'Curso não encontrado ou sem permissão.' });
+        }
+
+        // 2. Prepara as datas para o cálculo
+        const dataAtualObj = new Date();
+        const dataConclusaoStr = dataAtualObj.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+        
+        let prazoLimiteStr = null;
+        let concluidoNoPrazo = true;
+
+        // Se o curso tinha prazo, calcula se atrasou
+        if (curso.prazo_dias) {
+            const dataCriacaoObj = new Date(curso.created_at);
+            dataCriacaoObj.setDate(dataCriacaoObj.getDate() + Number(curso.prazo_dias));
+            
+            prazoLimiteStr = dataCriacaoObj.toISOString().split('T')[0];
+
+            // Compara ignorando horas para não dar falso positivo
+            const limite = new Date(prazoLimiteStr + "T12:00:00");
+            const entregue = new Date(dataConclusaoStr + "T12:00:00");
+            
+            concluidoNoPrazo = entregue <= limite;
+        }
+
+        // 3. INSERE NA TABELA DE AUDITORIA (A tabela da sua imagem!)
+        const { error: insertError } = await supabase
+            .from('historico_cursos') 
+            .insert([{
+                tenant_id: tenant_id,
+                usuario_id: usuario_id,
+                nome_curso: curso.titulo,
+                obrigatorio: true, // Ou false, dependendo da sua regra de negócio
+                prazo_limite: prazoLimiteStr,
+                data_conclusao: dataConclusaoStr,
+                concluido_no_prazo: concluidoNoPrazo
+            }]);
+
+        if (insertError) {
+            console.error(`[concluirCurso] Erro ao inserir no histórico:`, insertError.message);
+            return res.status(500).json({ error: 'Erro ao registrar histórico.' });
+        }
+
+        // 4. ATUALIZA A TABELA ORIGINAL para mudar o status visual
+        const { error: updateError } = await supabase
+            .from('cursos')
+            .update({ 
+                status: 'concluido',
+                concluido_em: dataAtualObj.toISOString()
+            })
+            .eq('id', id);
+
+        if (updateError) {
+            console.error(`[concluirCurso] Erro ao atualizar status:`, updateError.message);
+            return res.status(500).json({ error: 'Erro ao atualizar status.' });
+        }
+
+        console.log(`[concluirCurso] Sucesso! Registrado na tabela de auditoria.`);
+        return res.json({ message: 'Curso concluído com sucesso!' });
+
+    } catch (err) {
+        console.error(`[concluirCurso] Erro interno:`, err);
+        return res.status(500).json({ error: 'Erro interno.' });
+    }
+};

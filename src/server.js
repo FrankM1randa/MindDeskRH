@@ -36,6 +36,7 @@ app.use('/relatorios', relatoriosRoutes);
 app.use('/cursos', cursosRoutes);
 app.use('/avisos', avisosRoutes);
 app.use ('/atestados',atestadoRoutes);
+
 //Frank
 
 // rota teste

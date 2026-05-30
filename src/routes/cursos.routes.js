@@ -1,15 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, adminMiddleware } = require('../middlewares/auth.middleware');
-const { listarCursos, listarTodosCursos, enviarCurso, deletarCurso } = require('../controllers/cursos.controller');
-const cursosController = require('../controllers/cursos.controller');
 
+const { listarCursos, listarTodosCursos, enviarCurso, deletarCurso, concluirCurso } = require('../controllers/cursos.controller');
+
+// =========================================
+// Rota do Funcionário
+// =========================================
 // Funcionário vê seus cursos
 router.get('/', authMiddleware, listarCursos);
 
-// Somente admin
+// Funcionário conclui o curso (Apenas authMiddleware, pois o funcionário precisa ter acesso)
+router.patch('/:id/concluir', authMiddleware, concluirCurso);
+
+// =========================================
+// Rotas do Admin/Gerente
+// =========================================
 router.get('/todos', authMiddleware, adminMiddleware, listarTodosCursos);
 router.post('/', authMiddleware, adminMiddleware, enviarCurso);
 router.delete('/:id', authMiddleware, adminMiddleware, deletarCurso);
-router.patch('/:id/concluir', authMiddleware, cursosController.concluirCurso);
+
 module.exports = router;
