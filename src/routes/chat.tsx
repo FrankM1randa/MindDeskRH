@@ -29,7 +29,6 @@ type Msg = {
   text: string;
 };
 
-// Interface auxiliar para pegar dados do usuário logado se necessário
 interface UserSessionData {
   id: string;
   role?: string;
@@ -65,7 +64,6 @@ function ChatPage() {
     });
   }, [messages, isTyping]);
 
-  // Função para simular a extração do ID do usuário a partir do token/localStorage
   const getLoggedUserId = (): string => {
     try {
       const session = localStorage.getItem("user_session");
@@ -79,7 +77,6 @@ function ChatPage() {
     return "usuario-logado-id";
   };
 
-  // ✅ CORREÇÃO: Função que converte markdown básico em elementos React
   const renderText = (text: string) => {
     return text.split("\n").map((line, lineIdx, linesArr) => {
       const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
@@ -100,7 +97,6 @@ function ChatPage() {
     });
   };
 
-  // Envio de texto simples (Rota /perguntar)
   const handleSend = async () => {
     if (!input.trim() || isTyping) return;
 
@@ -146,7 +142,6 @@ function ChatPage() {
     }
   };
 
-  // Envio do arquivo de Atestado/Foto integrado ao seu Controller do Supabase
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || isTyping) return;
@@ -154,7 +149,7 @@ function ChatPage() {
     const userMsg: Msg = {
       id: Date.now(),
       type: "user",
-      text: ` Enviando documento: ${file.name}`,
+      text: `Enviando documento: ${file.name}`,
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -164,36 +159,52 @@ function ChatPage() {
     formData.append("file", file);
     formData.append("tenant_id", String(TENANT_ID));
     formData.append("usuario_id", getLoggedUserId());
-
-    const dataAtualYMD = new Date().toISOString().split("T")[0];
-    formData.append("data_emissao", dataAtualYMD);
+    formData.append("data_emissao", new Date().toISOString().split("T")[0]);
     formData.append("dias_afastamento", "1");
     formData.append("motivo_cid", input.trim() || "Enviado via Chat de IA");
 
     setInput("");
 
     try {
-      const res = await fetch(`${API}/atestados/upload`, {
+      // 1. Faz o upload e pega a URL
+      const uploadRes = await fetch(`${API}/atestados/upload`, {
         method: "POST",
-        headers: {
-          ...authHeaders(),
-        },
+        headers: { ...authHeaders() },
         body: formData,
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json();
         throw new Error(errData.error || "Erro no upload");
       }
 
-      const data = await res.json();
+      const uploadData = await uploadRes.json();
+      const urlAtestado = uploadData.url;
 
+      // 2. Manda a URL internamente pro orquestrador (usuário não vê isso)
+      const chatRes = await fetch(`${API}/chat/perguntar`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          query: `Analise este atestado medico: ${urlAtestado}`,
+          tenant_id: TENANT_ID,
+        }),
+      });
+
+      if (!chatRes.ok) throw new Error("Erro ao analisar atestado");
+
+      const chatData = await chatRes.json();
+
+      // 3. Só mostra a resposta da IA pro usuário
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now() + 1,
           type: "ai",
-          text: ` ${data.message || "Atestado recebido e enviado para análise do RH!"}\nVocê pode visualizá-lo aqui se desejar provisoriamente.`,
+          text: chatData.answer || "Atestado recebido e enviado para analise!",
         },
       ]);
     } catch (error: any) {
@@ -202,7 +213,7 @@ function ChatPage() {
         {
           id: Date.now() + 1,
           type: "ai",
-          text: ` Falha ao processar atestado: ${error.message || "Tente novamente."}`,
+          text: `Falha ao processar atestado: ${error.message || "Tente novamente."}`,
         },
       ]);
     } finally {
@@ -276,7 +287,6 @@ function ChatPage() {
               backdrop-blur-xl
             "
           >
-            {/* LEFT */}
             <button
               onClick={() => navigate({ to: "/manager" })}
               className="
@@ -299,7 +309,6 @@ function ChatPage() {
               Voltar
             </button>
 
-            {/* CENTER */}
             <div className="flex items-center gap-3">
               <div
                 className="
@@ -326,7 +335,6 @@ function ChatPage() {
               </div>
             </div>
 
-            {/* RIGHT */}
             <button
               onClick={handleNewChat}
               className="
@@ -357,7 +365,6 @@ function ChatPage() {
               bg-transparent
             "
           >
-            {/* HERO */}
             {messages.length === 1 && (
               <div className="flex flex-col items-center justify-center py-8 sm:py-12">
                 <img
@@ -377,7 +384,6 @@ function ChatPage() {
               </div>
             )}
 
-            {/* CHAT LIST */}
             {messages.map((m) => (
               <div
                 key={m.id}
@@ -402,13 +408,11 @@ function ChatPage() {
                     }
                   `}
                 >
-                  {/* ✅ CORREÇÃO: usa renderText em vez de {m.text} direto */}
                   {renderText(m.text)}
                 </div>
               </div>
             ))}
 
-            {/* TYPING INDICATOR */}
             {isTyping && (
               <div className="flex justify-start">
                 <div className="px-4 py-3 rounded-[24px] rounded-bl-md bg-white dark:bg-white/[0.04] border border-black/5 dark:border-white/10 flex items-center gap-1.5 shadow-sm">
@@ -449,7 +453,6 @@ function ChatPage() {
                 shadow-sm
               "
             >
-              {/* INPUT DE ARQUIVOS OCULTO */}
               <input
                 type="file"
                 ref={fileInputRef}
@@ -459,7 +462,6 @@ function ChatPage() {
                 className="hidden"
               />
 
-              {/* BOTÃO DE CLIP/UPLOAD ESTILIZADO */}
               <button
                 type="button"
                 disabled={isTyping}

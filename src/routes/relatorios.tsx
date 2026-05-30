@@ -141,11 +141,9 @@ function EmptyState() {
 }
 
 // ─── FALTAS ──────────────────────────────────────────────────────────────────
-// Lógica front: considera falta quando o funcionário tem < 2 registros no dia útil
 function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string }) {
   const diasUteis = getWeekdaysBetween(from, to);
 
-  // Agrupa registros por usuario_id + dia
   const registrosPorUsuarioDia: Record<string, Record<string, number>> = {};
   data.forEach((item: any) => {
     const uid = item.usuario_id;
@@ -155,7 +153,6 @@ function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string
     });
   });
 
-  // Recalcula faltas: dia útil com < 2 registros = falta
   const chartData = data.map((item: any) => {
     const uid = item.usuario_id;
     const faltasRecalc = diasUteis.filter((dia) => {
@@ -174,11 +171,9 @@ function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string
   if (!chartData.length) return <EmptyState />;
 
   const total = chartData.reduce((s, i) => s + i.faltas, 0);
-  const pior = chartData.reduce((a, b) => (b.faltas > a.faltas ? b : a), chartData[0]);
 
   return (
     <div className="space-y-5">
-      {/* Resumo */}
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Funcionários</div>
@@ -194,12 +189,10 @@ function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string
         </div>
       </div>
 
-      {/* Aviso metodologia */}
       <div className="rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 p-3 text-xs text-blue-700 dark:text-blue-300">
         Falta = dia útil com menos de 2 registros de ponto (entrada + saída). Finais de semana ignorados.
       </div>
 
-      {/* Gráfico */}
       <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 sm:p-5 shadow-sm">
         <div className="w-full h-[280px] -ml-2 pr-2">
           <ResponsiveContainer width="100%" height="100%">
@@ -249,7 +242,6 @@ function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string
         </div>
       </div>
 
-      {/* Ranking */}
       <div className="space-y-2">
         {chartData
           .sort((a, b) => b.faltas - a.faltas)
@@ -297,11 +289,9 @@ function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string
 }
 
 // ─── ATRASOS ─────────────────────────────────────────────────────────────────
-// Botões de funcionários → clica → gráfico linha (eixo Y = minutos, eixo X = data)
 function ChartAtrasos({ data }: { data: any[] }) {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
 
-  // Agrupa por funcionário
   const porFuncionario: Record<string, { nome: string; cargo: string; registros: any[] }> = {};
   data.forEach((item: any) => {
     const uid = item.usuario_id;
@@ -338,7 +328,6 @@ function ChartAtrasos({ data }: { data: any[] }) {
 
   return (
     <div className="space-y-5">
-      {/* Resumo */}
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Funcionários</div>
@@ -354,7 +343,6 @@ function ChartAtrasos({ data }: { data: any[] }) {
         </div>
       </div>
 
-      {/* Gráfico individual */}
       {selectedUser && selected ? (
         <div className="space-y-4">
           <button
@@ -435,7 +423,6 @@ function ChartAtrasos({ data }: { data: any[] }) {
           </div>
         </div>
       ) : (
-        /* Lista de funcionários como botões */
         <div className="space-y-2">
           <p className="text-xs text-zinc-400 dark:text-white/30 uppercase tracking-wider font-medium px-1">
             Selecione um funcionário para ver o histórico
@@ -476,9 +463,7 @@ function ChartAtrasos({ data }: { data: any[] }) {
 }
 
 // ─── BANCO DE HORAS ───────────────────────────────────────────────────────────
-// Mostra apenas saldo (+/-) por funcionário
 function ChartHoras({ data }: { data: any[] }) {
-  // Agrupa saldo por funcionário
   const porFuncionario: Record<string, { nome: string; cargo: string; saldoMinutos: number }> = {};
   data.forEach((item: any) => {
     const uid = item.usuario_id;
@@ -517,7 +502,6 @@ function ChartHoras({ data }: { data: any[] }) {
 
   return (
     <div className="space-y-5">
-      {/* Resumo */}
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl border border-green-200 dark:border-green-900/40 bg-green-50 dark:bg-green-950/20 p-4 flex items-center gap-3">
           <TrendingUp size={20} className="text-green-600 dark:text-green-400 shrink-0" />
@@ -535,7 +519,6 @@ function ChartHoras({ data }: { data: any[] }) {
         </div>
       </div>
 
-      {/* Gráfico saldo */}
       <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 sm:p-5 shadow-sm">
         <p className="text-xs text-zinc-400 dark:text-white/30 uppercase tracking-wider font-medium mb-4">
           Saldo em horas
@@ -585,7 +568,6 @@ function ChartHoras({ data }: { data: any[] }) {
         </div>
       </div>
 
-      {/* Cards de saldo por funcionário */}
       <div className="space-y-2">
         {funcionarios
           .sort((a, b) => a.saldoMinutos - b.saldoMinutos)
@@ -650,7 +632,6 @@ function TabelaFerias({ data }: any) {
     }
   }
 
-  // Retorna classes de cor apenas para o aviso (borda + fundo + texto)
   function corAviso(situacao: string) {
     const sit = normalizarTexto(situacao);
     switch (sit) {
@@ -745,7 +726,6 @@ function TabelaAfastamentos({ data, onUpdateStatus }: { data: any[]; onUpdateSta
   const [aba, setAba] = useState<AbaAfastamento>("pendente");
   const [busca, setBusca] = useState("");
 
-  // Helper: pega o nome independente de onde venha no objeto
   function nomeFuncionario(item: any): string {
     return item.usuarios?.nome || item.nome || item.usuario?.nome || "—";
   }
@@ -934,7 +914,6 @@ function RelatoriosPage() {
       setLoading(true);
 
       if (tipo === "afastamentos") {
-        // Busca atestados + pendentes (com join de nome) + lista de usuários em paralelo
         const [todosRes, pendentesRes, usuariosRes] = await Promise.all([
           fetch(`${API}/atestados?tenant_id=${TENANT_ID}`, { headers: authHeaders() }),
           fetch(`${API}/atestados/pendentes`, { headers: authHeaders() }),
@@ -945,29 +924,24 @@ function RelatoriosPage() {
         const pendentes: any[] = pendentesRes.ok ? await pendentesRes.json() : [];
         const usuarios: any[] = usuariosRes.ok ? await usuariosRes.json() : [];
 
-        // Monta mapa usuario_id → { nome, cargo, email }
         const nomeMapa: Record<string, any> = {};
 
-        // Fonte 1: /usuarios — cobre todos independente de status do atestado
         (Array.isArray(usuarios) ? usuarios : []).forEach((u: any) => {
           if (u.id) nomeMapa[u.id] = { nome: u.nome, cargo: u.cargo, email: u.email };
         });
 
-        // Fonte 2: pendentes com join (fallback caso /usuarios não esteja disponível)
         (Array.isArray(pendentes) ? pendentes : []).forEach((p: any) => {
           if (p.usuario_id && p.usuarios?.nome && !nomeMapa[p.usuario_id]) {
             nomeMapa[p.usuario_id] = p.usuarios;
           }
         });
 
-        // Fonte 3: qualquer item de todos que já venha com join
         (Array.isArray(todos) ? todos : []).forEach((p: any) => {
           if (p.usuario_id && p.usuarios?.nome && !nomeMapa[p.usuario_id]) {
             nomeMapa[p.usuario_id] = p.usuarios;
           }
         });
 
-        // Injeta dados do usuário em cada atestado
         const resultado = (Array.isArray(todos) ? todos : []).map((item: any) => ({
           ...item,
           usuarios: {
@@ -990,8 +964,9 @@ function RelatoriosPage() {
         default: return;
       }
 
+      // ✅ CORREÇÃO: banco de horas não usa filtro de datas
       let url = `${API}/relatorios/${endpoint}?tenant_id=${TENANT_ID}`;
-      if (tipo !== "ferias") url += `&data_inicio=${from}&data_fim=${to}`;
+      if (tipo !== "ferias" && tipo !== "horas") url += `&data_inicio=${from}&data_fim=${to}`;
 
       const response = await fetch(url, { headers: authHeaders() });
       const json = await response.json();
@@ -1139,7 +1114,8 @@ function RelatoriosPage() {
                 </button>
               </div>
 
-              {open !== "ferias" && open !== "afastamentos" && (
+              {/* ✅ CORREÇÃO: remove filtro de datas do banco de horas */}
+              {open !== "ferias" && open !== "afastamentos" && open !== "horas" && (
                 <div className="grid grid-cols-2 gap-3 mt-5">
                   <div>
                     <label className="text-[11px] uppercase tracking-wider text-zinc-500 dark:text-white/50">Início</label>
