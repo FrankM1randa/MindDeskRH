@@ -466,41 +466,63 @@ exports.listarRelatoriosPA = async (req, res) => {
         const tenant_id = Number(req.user.tenant_id);
         const gerente_id = String(req.user.id);
 
-        // Busca apenas as colunas necessárias para o front-end
-        const { data, error } = await supabase
+        // Calcula o mês de referência (mês anterior ao atual, sem ano)
+        const meses = [
+            "janeiro", "fevereiro", "marco", "abril", "maio", "junho",
+            "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
+        ];
+
+        const agora = new Date();
+        const mesIndex = agora.getMonth(); // 0 = janeiro
+
+        const mesAlvo = meses[(mesIndex - 1 + 12) % 12];
+        const mesFallback = meses[(mesIndex - 2 + 12) % 12];
+
+        // Tenta buscar o mês anterior
+        let { data, error } = await supabase
             .from('people_analytics')
             .select(`
-                id,
-                nome,
-                cargo,
-                mes_referencia,
-                score_burnout,
-                score_turnover,
-                score_engajamento,
-                score_elegibilidade_promocao,
-                analise_pa,
-                sentimento_predominante
+                id, nome, cargo, mes_referencia,
+                score_burnout, score_turnover, score_engajamento,
+                score_elegibilidade_promocao, score_humor,
+                analise_pa, sentimento_predominante
             `)
             .eq('tenant_id', tenant_id)
             .eq('gerente_id', gerente_id)
+            .eq('mes_referencia', mesAlvo)
             .order('created_at', { ascending: false });
 
-        if (error) {
-            return res.status(500).json({ error: error.message });
+        if (error) return res.status(500).json({ error: error.message });
+
+        // Se não achou, tenta dois meses atrás
+        if (!data || data.length === 0) {
+            const resultado = await supabase
+                .from('people_analytics')
+                .select(`
+                    id, nome, cargo, mes_referencia,
+                    score_burnout, score_turnover, score_engajamento,
+                    score_elegibilidade_promocao, score_humor,
+                    analise_pa, sentimento_predominante
+                `)
+                .eq('tenant_id', tenant_id)
+                .eq('gerente_id', gerente_id)
+                .eq('mes_referencia', mesFallback)
+                .order('created_at', { ascending: false });
+
+            if (resultado.error) return res.status(500).json({ error: resultado.error.message });
+            data = resultado.data;
         }
 
-        // Mapeia os dados do banco adicionando as cores calculadas
-        const relatoriosProcessados = data.map(funcionario => {
-            return {
-                ...funcionario,
-                cores: {
-                    burnout: calcularCorRisco(funcionario.score_burnout),
-                    turnover: calcularCorRisco(funcionario.score_turnover),
-                    engajamento: calcularCorEngajamento(funcionario.score_engajamento),
-                    promocao: calcularCorPromocao(funcionario.score_elegibilidade_promocao)
-                }
-            };
-        });
+        // Mapeia os dados adicionando as cores calculadas
+        const relatoriosProcessados = (data || []).map(funcionario => ({
+            ...funcionario,
+            cores: {
+                burnout: calcularCorRisco(funcionario.score_burnout),
+                turnover: calcularCorRisco(funcionario.score_turnover),
+                engajamento: calcularCorEngajamento(funcionario.score_engajamento),
+                promocao: calcularCorPromocao(funcionario.score_elegibilidade_promocao)
+            }
+        }));
 
         return res.status(200).json(relatoriosProcessados);
     } catch (err) {
