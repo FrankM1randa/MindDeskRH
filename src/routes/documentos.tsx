@@ -38,7 +38,7 @@ type CursoAgrupado = {
   titulo: string;
   link: string;
   descricao?: string;
-  data_limite?: string;
+  prazo_dias?: number;
   created_at?: string;
   usuarios_atribuidos: UsuarioAtribuido[];
 };
@@ -344,7 +344,7 @@ function CursosTab({
     titulo: "",
     link: "",
     descricao: "",
-    data_limite: "",
+    prazo_dias: "",
   });
 
   const [courseFile, setCourseFile] = useState<File | null>(null);
@@ -377,7 +377,7 @@ function CursosTab({
             titulo: c.titulo,
             link: c.link,
             descricao: c.descricao,
-            data_limite: c.data_limite,
+            prazo_dias: c.prazo_dias,
             created_at: c.created_at,
             usuarios_atribuidos: [],
           };
@@ -451,14 +451,16 @@ function CursosTab({
           titulo: form.titulo,
           link: finalLink,
           descricao: form.descricao || null,
-          data_limite: form.data_limite || null,
+          prazo_dias: form.prazo_dias
+            ? Number(form.prazo_dias)
+            : null,
         }),
       });
 
       if (!res.ok) throw new Error();
 
       showAlert("Curso adicionado.", "success");
-      setForm({ titulo: "", link: "", descricao: "", data_limite: "" });
+      setForm({ titulo: "", link: "", descricao: "", prazo_dias: "" });
       setCourseFile(null);
       fetchCursos();
     } catch {
@@ -482,7 +484,7 @@ function CursosTab({
           titulo: curso.titulo,
           link: curso.link,
           descricao: curso.descricao || null,
-          data_limite: curso.data_limite || null,
+          prazo_dias: curso.prazo_dias || null,
         }),
       });
 
@@ -564,13 +566,18 @@ function CursosTab({
 
           <div>
             <label className="text-xs font-semibold text-muted-foreground block mb-1 ml-1">
-              Data Limite para Conclusão (Opcional)
+              Prazo para conclusão (dias corridos)
             </label>
+
             <input
-              type="date"
+              type="number"
+              min="1"
               className="md-input"
-              value={form.data_limite}
-              onChange={(e) => setForm({ ...form, data_limite: e.target.value })}
+              placeholder="Ex: 30"
+              value={form.prazo_dias}
+              onChange={(e) =>
+                setForm({ ...form, prazo_dias: e.target.value })
+              }
             />
           </div>
 
@@ -649,12 +656,9 @@ function CursosTab({
                     <p className="text-sm text-muted-foreground mt-1">{c.descricao}</p>
                   )}
 
-                  {c.data_limite && (
-                    <p className="text-xs text-destructive font-medium mt-2 flex items-center gap-1">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Limite: {new Date(c.data_limite + "T00:00:00").toLocaleDateString("pt-BR")}
+                  {c.prazo_dias && (
+                    <p className="text-xs text-primary font-medium mt-2">
+                      Prazo: {c.prazo_dias} dias corridos
                     </p>
                   )}
                 </div>
