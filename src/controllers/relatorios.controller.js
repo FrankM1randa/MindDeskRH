@@ -433,3 +433,77 @@ exports.relatorioAfastamentos = async (req, res) => {
         return res.status(500).json({ error: 'Erro interno.', detalhe: err.message });
     }
 };
+
+
+// =========================================
+// Funções auxiliares para calcular as cores
+// =========================================
+const calcularCorRisco = (score) => {
+    if (score == null) return 'cinza'; // Caso não tenha nota
+    if (score < 50) return 'verde';
+    if (score < 80) return 'amarelo';
+    return 'vermelho'; // 80 ou mais
+};
+
+const calcularCorEngajamento = (score) => {
+    if (score == null) return 'cinza';
+    if (score < 40) return 'vermelho';
+    if (score <= 60) return 'amarelo'; // Entre 40 e 60
+    return 'verde'; // Maior que 60
+};
+
+const calcularCorPromocao = (score) => {
+    if (score == null) return 'cinza';
+    if (score > 50) return 'verde';
+    return 'cinza'; // 50 ou menos
+};
+
+// =========================================
+// Listar Relatórios de People Analytics
+// =========================================
+exports.listarRelatoriosPA = async (req, res) => {
+    try {
+        const tenant_id = Number(req.user.tenant_id);
+        const gerente_id = String(req.user.id);
+
+        // Busca apenas as colunas necessárias para o front-end
+        const { data, error } = await supabase
+            .from('people_analytics')
+            .select(`
+                id,
+                nome,
+                cargo,
+                mes_referencia,
+                score_burnout,
+                score_turnover,
+                score_engajamento,
+                score_elegibilidade_promocao,
+                analise_pa,
+                sentimento_predominante
+            `)
+            .eq('tenant_id', tenant_id)
+            .eq('gerente_id', gerente_id)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        // Mapeia os dados do banco adicionando as cores calculadas
+        const relatoriosProcessados = data.map(funcionario => {
+            return {
+                ...funcionario,
+                cores: {
+                    burnout: calcularCorRisco(funcionario.score_burnout),
+                    turnover: calcularCorRisco(funcionario.score_turnover),
+                    engajamento: calcularCorEngajamento(funcionario.score_engajamento),
+                    promocao: calcularCorPromocao(funcionario.score_elegibilidade_promocao)
+                }
+            };
+        });
+
+        return res.status(200).json(relatoriosProcessados);
+    } catch (err) {
+        return res.status(500).json({ error: 'Erro interno ao buscar relatórios de People Analytics.' });
+    }
+};

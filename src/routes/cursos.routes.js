@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authMiddleware, adminMiddleware } = require('../middlewares/auth.middleware');
 
-const { listarCursos, listarTodosCursos, enviarCurso, deletarCurso, concluirCurso } = require('../controllers/cursos.controller');
+const { listarCursos, listarTodosCursos, enviarCurso, deletarCurso, concluirCurso, verificarPermissoes } = require('../controllers/cursos.controller');
 
 // =========================================
 // Rota do Funcionário
@@ -19,5 +19,6 @@ router.post('/:id/concluir', authMiddleware, concluirCurso);
 router.get('/todos', authMiddleware, adminMiddleware, listarTodosCursos);
 router.post('/', authMiddleware, adminMiddleware, enviarCurso);
 router.delete('/:id', authMiddleware, adminMiddleware, deletarCurso);
+router.get('/verificar-acesso', authMiddleware, verificarPermissoes);
 
 module.exports = router;

@@ -251,3 +251,22 @@ exports.concluirCurso = async (req, res) => {
         return res.status(500).json({ error: 'Erro interno.' });
     }
 };
+
+// =========================================
+// Verifica permissões do usuário logado
+// =========================================
+exports.verificarPermissoes = async (req, res) => {
+    try {
+        // O req.user já vem do seu authMiddleware
+        const user = req.user;
+        const isAdmin = user.cargo === "admin" || user.cargo === "gerente";
+        
+        return res.json({ 
+            isAdmin,
+            cargo: user.cargo,
+            nome: user.nome
+        });
+    } catch (err) {
+        return res.status(500).json({ error: 'Erro ao verificar permissões.' });
+    }
+};
