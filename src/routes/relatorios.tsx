@@ -530,112 +530,104 @@ function ChartHoras({ data }: { data: any[] }) {
  * @param {Array} props.data - Lista de objetos com dados de férias.
  */
 function TabelaFerias({ data }: any) {
-  
-  // Log básico de montagem do componente
   console.info(`[TabelaFerias] Renderizando ${data?.length || 0} registros.`);
 
-  /**
-   * Normaliza strings para comparação (remove acentos e converte para minúsculo).
-   */
   function normalizarTexto(texto: string) {
     return texto?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") || "";
   }
 
-  /**
-   * Retorna classes CSS baseadas no status para as badges.
-   */
-  function corSituacao(situacao: string) {
-    const sit = normalizarTexto(situacao);
-    switch (sit) {
-      case "muito atrasada":
-      case "critica":
-        return "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400";
-      case "atrasada":
-      case "alta":
-        return "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400";
-      case "disponivel":
-      case "media":
-        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-400";
-      case "em dia":
-      case "baixa":
-        return "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400";
-      default:
-        return "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
-    }
+  function chave(item: any): string {
+    return item.prioridade || item.situacao || "";
   }
 
-  /**
-   * Retorna classes CSS baseadas no status para as caixas de aviso.
-   */
-  function corAviso(situacao: string) {
-    const sit = normalizarTexto(situacao);
-    switch (sit) {
-      case "muito atrasada":
-      case "critica":
-        return "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300";
-      case "atrasada":
-      case "alta":
-        return "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900/40 text-orange-700 dark:text-orange-300";
-      case "disponivel":
-      case "media":
-        return "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900/40 text-yellow-700 dark:text-yellow-300";
-      case "em dia":
-      case "baixa":
-        return "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900/40 text-green-700 dark:text-green-300";
-      default:
-        return "bg-zinc-100 dark:bg-white/[0.04] border-black/5 dark:border-white/10 text-zinc-700 dark:text-white/70";
-    }
+  function labelSituacao(raw: string): string {
+    const s = normalizarTexto(raw);
+    if (["critica", "muito atrasada"].includes(s))       return "Critica";
+    if (["alta", "atrasada"].includes(s))                return "Atrasado";
+    if (["media", "disponivel"].includes(s))             return "Disponível";
+    if (["baixa", "disponivel em breve"].includes(s))    return "Em breve";
+    return "Em dia";
   }
 
-  // Memoização simples ou variáveis auxiliares para não repetir o filter no JSX
-  const criticas = data.filter((i: any) => ["muito atrasada", "critica"].includes(normalizarTexto(i.situacao || i.prioridade))).length;
-  const atencao = data.filter((i: any) => ["atrasada", "alta"].includes(normalizarTexto(i.situacao || i.prioridade))).length;
-  const disponiveis = data.filter((i: any) => ["disponivel", "media", "em dia"].includes(normalizarTexto(i.situacao || i.prioridade))).length;
+  function corSituacao(raw: string): string {
+    const s = normalizarTexto(raw);
+    if (["critica", "muito atrasada"].includes(s))
+      return "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400";
+    if (["alta", "atrasada"].includes(s))
+      return "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400";
+    if (["media", "disponivel"].includes(s))
+      return "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400";
+    if (["baixa", "disponivel em breve"].includes(s))
+      return "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400";
+    return "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300";
+  }
+
+  function corAviso(raw: string): string {
+    const s = normalizarTexto(raw);
+    if (["critica", "muito atrasada"].includes(s))
+      return "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300";
+    if (["alta", "atrasada"].includes(s))
+      return "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900/40 text-orange-700 dark:text-orange-300";
+    if (["media", "disponivel"].includes(s))
+      return "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900/40 text-green-700 dark:text-green-300";
+    if (["baixa", "disponivel em breve"].includes(s))
+      return "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/40 text-blue-700 dark:text-blue-300";
+    return "bg-zinc-100 dark:bg-white/[0.04] border-black/5 dark:border-white/10 text-zinc-700 dark:text-white/70";
+  }
+
+  const criticas    = data.filter((i: any) => ["critica", "muito atrasada"].includes(normalizarTexto(chave(i)))).length;
+  const atencao     = data.filter((i: any) => ["alta", "atrasada"].includes(normalizarTexto(chave(i)))).length;
+  const disponiveis = data.filter((i: any) => ["media", "disponivel"].includes(normalizarTexto(chave(i)))).length;
 
   return (
     <div className="space-y-5">
-      {/* Cards de Resumo */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Funcionários</div>
           <div className="text-2xl font-bold mt-1">{data.length}</div>
         </div>
-        <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
-          <div className="text-xs text-zinc-500 dark:text-white/50">Críticas</div>
+        <div className="rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/10 p-4">
+          <div className="text-xs text-red-600 dark:text-red-400 font-medium">Férias Vencidas</div>
           <div className="text-2xl font-bold text-red-600 mt-1">{criticas}</div>
         </div>
-        <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
-          <div className="text-xs text-zinc-500 dark:text-white/50">Atenção</div>
+        <div className="rounded-2xl border border-orange-200 dark:border-orange-900/40 bg-orange-50 dark:bg-orange-950/10 p-4">
+          <div className="text-xs text-orange-600 dark:text-orange-400 font-medium">Atrasado</div>
           <div className="text-2xl font-bold text-orange-600 mt-1">{atencao}</div>
         </div>
-        <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
-          <div className="text-xs text-zinc-500 dark:text-white/50">Disponíveis</div>
+        <div className="rounded-2xl border border-green-200 dark:border-green-900/40 bg-green-50 dark:bg-green-950/10 p-4">
+          <div className="text-xs text-green-600 dark:text-green-400 font-medium">Disponível</div>
           <div className="text-2xl font-bold text-green-600 mt-1">{disponiveis}</div>
         </div>
       </div>
 
-      {/* Lista de Itens */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {data.map((item: any, index: number) => (
-          <div key={index} className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm">
+          <div
+            key={index}
+            className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm"
+          >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h4 className="font-semibold text-zinc-900 dark:text-white">{item.nome || "-"}</h4>
                 <p className="text-xs text-zinc-500 dark:text-white/50 mt-1">{item.cargo || "-"}</p>
               </div>
-              <span className={`text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider ${corSituacao(item.situacao || item.prioridade)}`}>
-                {item.situacao || item.prioridade || "Em dia"}
+              <span className={`text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shrink-0 ${corSituacao(chave(item))}`}>
+                {labelSituacao(chave(item))}
               </span>
             </div>
-            {/* Grid de Datas e Pendências */}
+
             <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
               <div>
                 <div className="text-xs text-zinc-500 dark:text-white/50">Últimas férias</div>
-                <div className="font-medium mt-1 text-zinc-900 dark:text-white">{formatDateBR(item.data_ultima_ferias)}</div>
+                <div className="font-medium mt-1 text-zinc-900 dark:text-white">
+                  {formatDateBR(item.data_ultima_ferias)}
+                </div>
               </div>
               <div>
                 <div className="text-xs text-zinc-500 dark:text-white/50">Vencimento</div>
-                <div className="font-medium mt-1 text-zinc-900 dark:text-white">{formatDateBR(item.data_vencimento_ferias)}</div>
+                <div className="font-medium mt-1 text-zinc-900 dark:text-white">
+                  {formatDateBR(item.data_vencimento_ferias)}
+                </div>
               </div>
               <div className="col-span-2">
                 <div className="text-xs text-zinc-500 dark:text-white/50">Períodos pendentes</div>
@@ -644,8 +636,9 @@ function TabelaFerias({ data }: any) {
                 </div>
               </div>
             </div>
+
             {item.aviso && (
-              <div className={`mt-5 rounded-2xl border p-4 text-sm font-medium ${corAviso(item.situacao || item.prioridade)}`}>
+              <div className={`mt-5 rounded-2xl border p-4 text-sm font-medium ${corAviso(chave(item))}`}>
                 {item.aviso}
               </div>
             )}
