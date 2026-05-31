@@ -144,29 +144,15 @@ function EmptyState() {
 function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string }) {
   const diasUteis = getWeekdaysBetween(from, to);
 
-  const registrosPorUsuarioDia: Record<string, Record<string, number>> = {};
-  data.forEach((item: any) => {
-    const uid = item.usuario_id;
-    if (!registrosPorUsuarioDia[uid]) registrosPorUsuarioDia[uid] = {};
-    (item.dias_falta || []).forEach((dia: string) => {
-      registrosPorUsuarioDia[uid][dia] = (registrosPorUsuarioDia[uid][dia] || 0) + 1;
-    });
-  });
-
-  const chartData = data.map((item: any) => {
-    const uid = item.usuario_id;
-    const faltasRecalc = diasUteis.filter((dia) => {
-      const regs = registrosPorUsuarioDia[uid]?.[dia] ?? 0;
-      return regs < 2;
-    });
-    return {
+  const chartData = useMemo(() => {
+    return data.map((item: any) => ({
       name: (item.nome || "").split(" ")[0],
       nomeCompleto: item.nome,
       cargo: item.cargo,
-      faltas: faltasRecalc.length,
-      diasFalta: faltasRecalc,
-    };
-  }).filter((i) => i.faltas > 0);
+      faltas: Number(item.total_faltas) || 0,
+      diasFalta: item.dias_falta || [],
+    }));
+  }, [data]);
 
   if (!chartData.length) return <EmptyState />;
 
@@ -190,7 +176,7 @@ function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string
       </div>
 
       <div className="rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 p-3 text-xs text-blue-700 dark:text-blue-300">
-        Falta = dia útil com menos de 2 registros de ponto (entrada + saída). Finais de semana ignorados.
+        Falta = dia útil com menos de 4 registros de ponto. Finais de semana ignorados.
       </div>
 
       <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 sm:p-5 shadow-sm">
@@ -252,7 +238,7 @@ function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string
             >
               <div
                 className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${
-                  i === 0
+                  item.faltas > 0
                     ? "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400"
                     : "bg-zinc-100 text-zinc-500 dark:bg-white/[0.06] dark:text-white/50"
                 }`}
@@ -288,134 +274,79 @@ function ChartFaltas({ data, from, to }: { data: any[]; from: string; to: string
   );
 }
 
-// ─── ATRASOS ─────────────────────────────────────────────────────────────────
 function ChartAtrasos({ data }: { data: any[] }) {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
 
-  const porFuncionario: Record<string, { nome: string; cargo: string; registros: any[] }> = {};
-  data.forEach((item: any) => {
-    const uid = item.usuario_id;
-    if (!porFuncionario[uid]) {
-      porFuncionario[uid] = {
-        nome: item.nome || "—",
-        cargo: item.cargo || "Funcionário",
-        registros: [],
-      };
-    }
-    porFuncionario[uid].registros.push(item);
-  });
+  // O useMemo agora processa a estrutura consolidada que vem do backend
+  const { funcionarios, porFuncionario } = useMemo(() => {
+    const lista = data.map((item) => ({
+      uid: item.usuario_id,
+      nome: item.nome || "—",
+      cargo: item.cargo || "Funcionário",
+      totalAtraso: item.total_atraso_acumulado_mes || 0,
+      registros: (item.atrasos || []).map((a: any) => ({
+        data: formatDateBR(a.data), // Formatando a data para o gráfico
+        minutos: a.minutos_atraso || 0
+      })),
+      qtd: (item.atrasos || []).length
+    }));
 
-  const funcionarios = Object.entries(porFuncionario).map(([uid, val]) => ({
-    uid,
-    ...val,
-    totalMinutos: val.registros.reduce((s, r) => s + (r.minutos_atraso || 0), 0),
-    qtd: val.registros.length,
-  }));
+    const grupo = lista.reduce((acc, f) => {
+      acc[f.uid] = f;
+      return acc;
+    }, {} as Record<string, any>);
+
+    return { funcionarios: lista, porFuncionario: grupo };
+  }, [data]);
 
   const selected = selectedUser ? porFuncionario[selectedUser] : null;
 
-  const lineData = selected
-    ? selected.registros
-        .sort((a, b) => (a.data > b.data ? 1 : -1))
-        .map((r) => ({
-          data: formatDateBR(r.data),
-          minutos: r.minutos_atraso || 0,
-          horario: r.horario_entrada,
-        }))
-    : [];
-
-  const totalMinutos = funcionarios.reduce((s, f) => s + f.totalMinutos, 0);
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* Cards de Resumo */}
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Funcionários</div>
-          <div className="text-2xl font-bold mt-1 text-zinc-900 dark:text-white">{funcionarios.length}</div>
+          <div className="text-2xl font-bold mt-1">{funcionarios.length}</div>
         </div>
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Ocorrências</div>
-          <div className="text-2xl font-bold mt-1 text-orange-500">{data.length}</div>
+          <div className="text-2xl font-bold mt-1 text-orange-500">
+            {funcionarios.reduce((s, f) => s + f.qtd, 0)}
+          </div>
         </div>
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Total min.</div>
-          <div className="text-2xl font-bold mt-1 text-zinc-900 dark:text-white">{totalMinutos}</div>
+          <div className="text-2xl font-bold mt-1 text-zinc-900 dark:text-white">
+            {funcionarios.reduce((s, f) => s + f.totalAtraso, 0)}
+          </div>
         </div>
       </div>
 
-      {selectedUser && selected ? (
+      {selected ? (
         <div className="space-y-4">
-          <button
-            onClick={() => setSelectedUser(null)}
-            className="flex items-center gap-2 text-sm text-zinc-500 dark:text-white/50 hover:text-zinc-800 dark:hover:text-white transition-colors"
+          <button 
+            onClick={() => setSelectedUser(null)} 
+            className="flex items-center gap-2 text-sm text-zinc-500 hover:text-primary transition-colors"
           >
-            <ArrowLeft size={14} />
-            Voltar para todos
+            <ArrowLeft size={14} /> Voltar para lista
           </button>
-
-          <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-2xl bg-orange-100 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/40 flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold text-sm shrink-0">
-                {selected.nome.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <p className="font-semibold text-zinc-900 dark:text-white">{selected.nome}</p>
-                <p className="text-xs text-zinc-500 dark:text-white/50">
-                  {selected.registros.length} atraso{selected.registros.length !== 1 ? "s" : ""} no período
-                </p>
-              </div>
-            </div>
-
-            <div className="w-full h-[260px] -ml-3 pr-2">
+          
+          <div className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6 shadow-sm">
+            <h3 className="font-semibold mb-6">{selected.nome} - Evolução de Atrasos</h3>
+            <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={lineData}>
-                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.12} />
-                  <XAxis
-                    dataKey="data"
-                    tick={{ fontSize: 11, fill: isDark ? "#a1a1aa" : "#71717a" }}
-                    axisLine={false}
-                    tickLine={false}
-                    angle={-35}
-                    textAnchor="end"
-                    height={48}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12, fill: isDark ? "#a1a1aa" : "#71717a" }}
-                    axisLine={false}
-                    tickLine={false}
-                    label={{
-                      value: "minutos",
-                      angle: -90,
-                      position: "insideLeft",
-                      offset: 10,
-                      style: { fontSize: 11, fill: isDark ? "#71717a" : "#a1a1aa" },
-                    }}
-                  />
-                  <ReferenceLine
-                    y={5}
-                    stroke="#f97316"
-                    strokeDasharray="4 4"
-                    strokeOpacity={0.5}
-                    label={{ value: "5 min", fontSize: 10, fill: "#f97316", position: "right" }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: isDark ? "#1f2937" : "#ffffff",
-                      borderColor: isDark ? "#374151" : "#e5e7eb",
-                      borderRadius: "14px",
-                    }}
-                    formatter={(val: any, _: any, props: any) => [
-                      `${val} min (entrada: ${props.payload.horario})`,
-                      "Atraso",
-                    ]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="minutos"
-                    stroke="#f97316"
-                    strokeWidth={2.5}
-                    dot={{ r: 5, fill: "#f97316", strokeWidth: 0 }}
-                    activeDot={{ r: 7 }}
+                <LineChart data={selected.registros}>
+                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.1} />
+                  <XAxis dataKey="data" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: "12px", backgroundColor: isDark ? "#1f2937" : "#fff" }} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="minutos" 
+                    stroke="#f97316" 
+                    strokeWidth={3} 
+                    dot={{ r: 4, fill: "#f97316" }} 
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -424,44 +355,29 @@ function ChartAtrasos({ data }: { data: any[] }) {
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs text-zinc-400 dark:text-white/30 uppercase tracking-wider font-medium px-1">
-            Selecione um funcionário para ver o histórico
-          </p>
-          {funcionarios
-            .sort((a, b) => b.totalMinutos - a.totalMinutos)
-            .map((f) => (
-              <button
-                key={f.uid}
-                onClick={() => setSelectedUser(f.uid)}
-                className="w-full flex items-center gap-4 rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4 text-left hover:border-primary/30 hover:bg-primary/[0.02] dark:hover:bg-primary/[0.05] transition-all group"
-              >
-                <div className="w-10 h-10 rounded-2xl bg-orange-100 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold text-sm shrink-0">
-                  {f.nome.charAt(0).toUpperCase()}
+          {funcionarios.sort((a, b) => b.totalAtraso - a.totalAtraso).map((f) => (
+            <button 
+              key={f.uid} 
+              onClick={() => setSelectedUser(f.uid)} 
+              className="w-full flex items-center justify-between p-4 rounded-2xl border border-black/5 hover:border-primary/30 transition-all hover:bg-zinc-50 dark:hover:bg-white/[0.02]"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-950/40 flex items-center justify-center font-bold text-orange-600 dark:text-orange-400">
+                  {f.nome.charAt(0)}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-zinc-900 dark:text-white text-sm truncate">{f.nome}</p>
-                  <p className="text-xs text-zinc-500 dark:text-white/40">{f.cargo}</p>
+                <div className="text-left">
+                  <p className="font-semibold text-sm">{f.nome}</p>
+                  <p className="text-xs text-zinc-500">{f.qtd} ocorrências</p>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-bold text-orange-500">
-                    {f.totalMinutos} min
-                  </p>
-                  <p className="text-xs text-zinc-400 dark:text-white/30">
-                    {f.qtd} ocorrência{f.qtd !== 1 ? "s" : ""}
-                  </p>
-                </div>
-                <ChevronRight
-                  size={16}
-                  className="text-zinc-300 dark:text-white/20 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0"
-                />
-              </button>
-            ))}
+              </div>
+              <p className="font-bold text-orange-500">{f.totalAtraso} min</p>
+            </button>
+          ))}
         </div>
       )}
     </div>
   );
 }
-
 // ─── BANCO DE HORAS ───────────────────────────────────────────────────────────
 function ChartHoras({ data }: { data: any[] }) {
   const porFuncionario: Record<string, { nome: string; cargo: string; saldoMinutos: number }> = {};
@@ -607,11 +523,27 @@ function ChartHoras({ data }: { data: any[] }) {
 }
 
 // ─── FÉRIAS ───────────────────────────────────────────────────────────────────
+/**
+ * Componente TabelaFerias
+ * Exibe um dashboard de status de férias dos funcionários.
+ * @param {Object} props - Propriedades do componente.
+ * @param {Array} props.data - Lista de objetos com dados de férias.
+ */
 function TabelaFerias({ data }: any) {
+  
+  // Log básico de montagem do componente
+  console.info(`[TabelaFerias] Renderizando ${data?.length || 0} registros.`);
+
+  /**
+   * Normaliza strings para comparação (remove acentos e converte para minúsculo).
+   */
   function normalizarTexto(texto: string) {
     return texto?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") || "";
   }
 
+  /**
+   * Retorna classes CSS baseadas no status para as badges.
+   */
   function corSituacao(situacao: string) {
     const sit = normalizarTexto(situacao);
     switch (sit) {
@@ -632,6 +564,9 @@ function TabelaFerias({ data }: any) {
     }
   }
 
+  /**
+   * Retorna classes CSS baseadas no status para as caixas de aviso.
+   */
   function corAviso(situacao: string) {
     const sit = normalizarTexto(situacao);
     switch (sit) {
@@ -652,8 +587,14 @@ function TabelaFerias({ data }: any) {
     }
   }
 
+  // Memoização simples ou variáveis auxiliares para não repetir o filter no JSX
+  const criticas = data.filter((i: any) => ["muito atrasada", "critica"].includes(normalizarTexto(i.situacao || i.prioridade))).length;
+  const atencao = data.filter((i: any) => ["atrasada", "alta"].includes(normalizarTexto(i.situacao || i.prioridade))).length;
+  const disponiveis = data.filter((i: any) => ["disponivel", "media", "em dia"].includes(normalizarTexto(i.situacao || i.prioridade))).length;
+
   return (
     <div className="space-y-5">
+      {/* Cards de Resumo */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Funcionários</div>
@@ -661,24 +602,19 @@ function TabelaFerias({ data }: any) {
         </div>
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Críticas</div>
-          <div className="text-2xl font-bold text-red-600 mt-1">
-            {data.filter((i: any) => { const sit = normalizarTexto(i.situacao || i.prioridade); return sit === "muito atrasada" || sit === "critica"; }).length}
-          </div>
+          <div className="text-2xl font-bold text-red-600 mt-1">{criticas}</div>
         </div>
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Atenção</div>
-          <div className="text-2xl font-bold text-orange-600 mt-1">
-            {data.filter((i: any) => { const sit = normalizarTexto(i.situacao || i.prioridade); return sit === "atrasada" || sit === "alta"; }).length}
-          </div>
+          <div className="text-2xl font-bold text-orange-600 mt-1">{atencao}</div>
         </div>
         <div className="rounded-2xl border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-4">
           <div className="text-xs text-zinc-500 dark:text-white/50">Disponíveis</div>
-          <div className="text-2xl font-bold text-green-600 mt-1">
-            {data.filter((i: any) => { const sit = normalizarTexto(i.situacao || i.prioridade); return sit === "disponivel" || sit === "media" || sit === "em dia"; }).length}
-          </div>
+          <div className="text-2xl font-bold text-green-600 mt-1">{disponiveis}</div>
         </div>
       </div>
 
+      {/* Lista de Itens */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {data.map((item: any, index: number) => (
           <div key={index} className="rounded-[28px] border border-black/5 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 shadow-sm">
@@ -691,6 +627,7 @@ function TabelaFerias({ data }: any) {
                 {item.situacao || item.prioridade || "Em dia"}
               </span>
             </div>
+            {/* Grid de Datas e Pendências */}
             <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
               <div>
                 <div className="text-xs text-zinc-500 dark:text-white/50">Últimas férias</div>

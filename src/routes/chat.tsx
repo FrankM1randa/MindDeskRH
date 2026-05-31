@@ -156,13 +156,22 @@ function ChatPage() {
     setIsTyping(true);
 
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("tenant_id", String(TENANT_ID));
-    formData.append("usuario_id", getLoggedUserId());
-    formData.append("data_emissao", new Date().toISOString().split("T")[0]);
-    formData.append("dias_afastamento", "1");
-    formData.append("motivo_cid", input.trim() || "Enviado via Chat de IA");
 
+// O nome precisa ser exatamente o mesmo do multer:
+// upload.single('arquivo')
+formData.append("arquivo", file);
+
+formData.append("tenant_id", String(TENANT_ID));
+formData.append("usuario_id", getLoggedUserId());
+formData.append(
+  "data_emissao",
+  new Date().toISOString().split("T")[0]
+);
+formData.append("dias_afastamento", "1");
+formData.append(
+  "motivo_cid",
+  input.trim() || "Enviado via Chat de IA"
+);
     setInput("");
 
     try {
