@@ -1,7 +1,7 @@
 /*
- Configuração para requisição ao supabase.
+  Criação das variavéis que realizam a conexão com o banco de dados
+  o arquivo esta vindo do .env
 */
-
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
